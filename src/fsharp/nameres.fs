@@ -2144,6 +2144,10 @@ let rec ResolveFieldInModuleOrNamespace (ncenv:NameResolver) nenv ad (resInfo:Re
         let modulScopedFieldNames = 
             match TryFindTypeWithRecdField modref id  with
             | Some tycon when IsEntityAccessible ncenv.amap m ad (modref.MkNestedTyconRef tycon) -> 
+                let showDeprecated = HasFSharpAttribute ncenv.g ncenv.g.attrib_RequireQualifiedAccessAttribute tycon.Attribs             
+                if showDeprecated then
+                    let message = sprintf "The record type for the record case '%s' was defined with the RequireQualifiedAccessAttribute. Include the name of the record type ('%s') in the name you are using.'" (id.ToString()) tycon.DisplayName
+                    warning(Deprecated(message,m))
                 success(modref.MkNestedRecdFieldRef tycon id, rest)
             | _ -> error
         // search for type-qualified names, e.g. { Microsoft.FSharp.Core.Ref.contents = 1 } 
