@@ -2,6 +2,7 @@
 
 set _SCRIPT_DRIVE=%~d0
 set _SCRIPT_PATH=%~p0
+set FSCBinPath=D:\code\fsharp\Debug\net40\bin
 set SCRIPT_ROOT=%_SCRIPT_DRIVE%%_SCRIPT_PATH%
 
 set REG_SOFTWARE=HKLM\SOFTWARE
