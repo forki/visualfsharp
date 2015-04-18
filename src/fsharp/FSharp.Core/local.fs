@@ -884,11 +884,19 @@ module internal Array =
         let len = array.Length 
         if len < 2 then () 
         else
-            // 'keys' is an array storing the projected keys
             let keys = zeroCreateUnchecked array.Length
             for i = 0 to array.Length - 1 do 
                 keys.[i] <- f array.[i]
-            stableSortWithKeys array keys
+
+            let cFast = LanguagePrimitives.FastGenericComparerCanBeNull<'U>
+            match cFast with 
+            | null -> 
+                // An optimization for the cases where the keys and values coincide and do not have identity, e.g. are integers
+                // In this case an unstable sort is just as good as a stable sort (and faster)
+                System.Array.Sort<_,_>(keys, array)
+            | _ -> 
+                // 'keys' is an array storing the projected keys                
+                stableSortWithKeys array keys
 
     let stableSortInPlace (array : array<'T>) =
         let len = array.Length 
