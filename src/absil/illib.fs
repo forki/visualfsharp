@@ -230,12 +230,6 @@ module List =
 
         loop [] n l
 
-    let rec drop n l = 
-        match l with 
-        | []    -> []
-        | _::xs -> if n=0 then l else drop (n-1) xs
-
-
     let splitChoose select l =
         let rec ch acc1 acc2 l = 
             match l with 

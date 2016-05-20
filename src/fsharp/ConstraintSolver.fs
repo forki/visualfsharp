@@ -2026,7 +2026,7 @@ and ReportNoCandidatesError (csenv:ConstraintSolverEnv) (nUnnamedCallerArgs,nNam
                     let errid =
                         let suggestNamesForMissingArguments = 
                             if nReqd > nActual then 
-                                let missingArgs = List.drop nReqd cmeth.AllUnnamedCalledArgs
+                                let missingArgs = List.skip nReqd cmeth.AllUnnamedCalledArgs
                                 match NamesOfCalledArgs missingArgs with 
                                 | [] -> (false, "")
                                 | names -> (true, String.concat ";" (pathOfLid names))

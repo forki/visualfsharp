@@ -5086,7 +5086,7 @@ and GenMethodForBinding
          ()    
     | Some(memberInfo) when not v.IsExtensionMember -> 
 
-       let ilMethTypars = ilTypars |> List.drop mspec.EnclosingType.GenericArgs.Length
+       let ilMethTypars = ilTypars |> List.skip mspec.EnclosingType.GenericArgs.Length
        if memberInfo.MemberFlags.MemberKind = MemberKind.Constructor then 
            assert (isNil ilMethTypars)
            let mdef = mkILCtor (access,ilParams,ilMethodBody) 

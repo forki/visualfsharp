@@ -1506,7 +1506,7 @@ let AdjustAndForgetUsesOfRecValue cenv (vrefTgt: ValRef) (valScheme : ValScheme)
                           errorR(Error(FSComp.SR.tcUnexpectedExprAtRecInfPoint(),m)) 
                           NormalValUse,[]
                   
-                  let ityargs = generalizeTypars (List.drop (List.length tyargs0) generalizedTypars)
+                  let ityargs = generalizeTypars (List.skip (List.length tyargs0) generalizedTypars)
                   primMkApp (Expr.Val (vrefTgt,vrefFlags,m),fty) (tyargs0 @ ityargs) [] m
               fixupPoint :=   fixedUpExpr)
 
@@ -4588,7 +4588,7 @@ and TcTypeApp cenv newOk checkCxs occ env tpenv m tcref pathTypeArgs (args: SynT
         error (TyconBadArgs(env.DisplayEnv,tcref,pathTypeArgs.Length + args.Length,m))
     let args',tpenv = 
         // Get the suffix of typars
-        let tpsForArgs = List.drop (tps.Length - args.Length) tps
+        let tpsForArgs = List.skip (tps.Length - args.Length) tps
         let kindsForArgs = tpsForArgs |> List.map (fun tp -> tp.Kind)
         TcTypesOrMeasures (Some kindsForArgs) cenv newOk checkCxs occ env tpenv args m
     let args' = pathTypeArgs @ args'
