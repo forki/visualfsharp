@@ -1,9 +1,8 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 // Various tests for the:
 // Microsoft.FSharp.Collections.List module
 
-#nowarn "44" // This construct is deprecated. please use List.item
 namespace FSharp.Core.Unittests.FSharp_Core.Microsoft_FSharp_Collections
 
 open System
@@ -22,7 +21,7 @@ type ListWindowedTestInput<'t> =
     {
         InputList : 't list
         WindowSize : int
-        ExpectedList : 't[] list
+        ExpectedList : 't list list
         Exception : Type option
     }
 
@@ -98,6 +97,13 @@ type ListModule02() =
         let resultStr = List.map3 funcStr ["A";"B";"C";"D"] ["a";"b";"c";"d"] ["1";"2";"3";"4"]        
         Assert.AreEqual(["Aa1";"Bb2";"Cc3";"Dd4"], resultStr)
         
+        // lists of different length
+        let shortList = [1]
+        let longerList = [1; 2]
+        CheckThrowsArgumentException  (fun () -> List.map3 funcInt shortList shortList longerList |> ignore)
+        CheckThrowsArgumentException  (fun () -> List.map3 funcInt shortList longerList shortList |> ignore)
+        CheckThrowsArgumentException  (fun () -> List.map3 funcInt shortList shortList longerList |> ignore)  
+
         // empty List
         let resultEpt = List.map3 funcInt List.empty List.empty List.empty
         Assert.AreEqual(List.empty<int>, resultEpt)
@@ -177,6 +183,12 @@ type ListModule02() =
         let resultStr = List.mapi2 funcStr [3;6;9;11] ["a";"b";"c";"d"]        
         Assert.AreEqual([4;8;12;15], resultStr)
         
+        // lists of different length
+        let shortList = [1]
+        let longerList = [1; 2]       
+        CheckThrowsArgumentException  (fun () -> List.mapi2 funcInt shortList longerList |> ignore)
+        CheckThrowsArgumentException  (fun () -> List.mapi2 funcInt longerList shortList |> ignore)
+
         // empty List
         let emptyArr:int list = [ ]
         let resultEpt = List.mapi2 funcInt emptyArr emptyArr        
@@ -222,8 +234,8 @@ type ListModule02() =
         Assert.AreEqual("BBC", resultStrAcc)
 
         // empty List
-        let resultEpt,resultEptAcc = List.mapFold funcInt 100 []
-        Assert.AreEqual(([] : int list), resultEpt)
+        let (resultEpt: int list),resultEptAcc = List.mapFold funcInt 100 []
+        Assert.AreEqual(([]: int list), resultEpt)
         Assert.AreEqual(100, resultEptAcc)
 
         ()
@@ -248,8 +260,8 @@ type ListModule02() =
         Assert.AreEqual("CBB", resultStrAcc)
 
         // empty List
-        let resultEpt,resultEptAcc = List.mapFoldBack funcInt [] 100
-        Assert.AreEqual(([] : int list),  resultEpt)
+        let (resultEpt: int list),resultEptAcc = List.mapFoldBack funcInt [] 100
+        Assert.AreEqual(([]: int list), resultEpt)
         Assert.AreEqual(100, resultEptAcc)
 
         ()
@@ -317,21 +329,6 @@ type ListModule02() =
         let funcEpt () = 1
         CheckThrowsArgumentException ( fun() -> List.minBy funcEpt List.empty)
        
-        ()
-        
-    [<Test>]
-    member this.Nth() = 
-        // integer List 
-        let resultInt = List.nth [3;7;9;4;8;1;1;2] 3        
-        Assert.AreEqual(4, resultInt)
-        
-        // string List
-        let resultStr = List.nth   ["a";"b";"c";"d"] 3        
-        Assert.AreEqual("d", resultStr)
-        
-        // empty List 
-        CheckThrowsArgumentException ( fun() -> List.nth List.empty 1)
-
         ()
 
     [<Test>]
@@ -827,11 +824,12 @@ type ListModule02() =
         Assert.AreEqual(["str1";"str2"], List.truncate 2 ["str1";"str2";"str3"])
 
         // empty list
-        Assert.AreEqual([], List.truncate 0 [])
-        Assert.AreEqual([], List.truncate 1 [])
+        Assert.AreEqual(([] : int list), List.truncate 0 ([] : int list))
+        Assert.AreEqual(([] : int list), List.truncate 1 ([] : int list))
 
         // negative count
-        CheckThrowsArgumentException(fun() -> List.truncate -1 [1..5] |> ignore)
+        Assert.AreEqual(([] : int list), List.truncate -1 [1..5])
+        Assert.AreEqual(([] : int list), List.truncate System.Int32.MinValue [1..5])
 
         ()
 
@@ -981,70 +979,70 @@ type ListModule02() =
         {
           InputList = [1..10]
           WindowSize = 1
-          ExpectedList =  [ for i in 1..10 do yield [| i |] ]
+          ExpectedList =  [ for i in 1..10 do yield [i] ]
           Exception = None
         } |> testWindowed
         {
           InputList = [1..10]
           WindowSize = 5
-          ExpectedList =  [ for i in 1..6 do yield [| i; i+1; i+2; i+3; i+4 |] ]
+          ExpectedList =  [ for i in 1..6 do yield [i; i+1; i+2; i+3; i+4] ]
           Exception = None
         } |> testWindowed
         {
           InputList = [1..10]
           WindowSize = 10
-          ExpectedList =  [ yield [| 1 .. 10 |] ]
+          ExpectedList =  [ yield [1..10] ]
           Exception = None
         } |> testWindowed
         {
           InputList = [1..10]
           WindowSize = 25
-          ExpectedList = []
+          ExpectedList = ([] : int list list)
           Exception = None
         } |> testWindowed
         {
           InputList = ["str1";"str2";"str3";"str4"]
           WindowSize = 2
-          ExpectedList =  [ [|"str1";"str2"|]; [|"str2";"str3"|]; [|"str3";"str4"|] ]
+          ExpectedList =  [ ["str1";"str2"]; ["str2";"str3"]; ["str3";"str4"] ]
           Exception = None
         } |> testWindowed
         {
-          InputList = []
+          InputList = ([] : int list)
           WindowSize = 2
-          ExpectedList = []
+          ExpectedList = ([] : int list list)
           Exception = None
         } |> testWindowed
         {
           InputList = [1..10]
           WindowSize = 0
-          ExpectedList =  []
+          ExpectedList =  ([] : int list list)
           Exception = Some typeof<ArgumentException>
         } |> testWindowed
 
         // expectedLists indexed by arraySize,windowSize
         let expectedLists = Array2D.zeroCreate 6 6
-        expectedLists.[1,1] <- [ [|1|] ]
-        expectedLists.[2,1] <- [ [|1|]; [|2|] ]
-        expectedLists.[2,2] <- [ [|1; 2|] ]
-        expectedLists.[3,1] <- [ [|1|]; [|2|]; [|3|] ]
-        expectedLists.[3,2] <- [ [|1; 2|]; [|2; 3|] ]
-        expectedLists.[3,3] <- [ [|1; 2; 3|] ]
-        expectedLists.[4,1] <- [ [|1|]; [|2|]; [|3|]; [|4|] ]
-        expectedLists.[4,2] <- [ [|1; 2|]; [|2; 3|]; [|3; 4|] ]
-        expectedLists.[4,3] <- [ [|1; 2; 3|]; [|2; 3; 4|] ]
-        expectedLists.[4,4] <- [ [|1; 2; 3; 4|] ]
-        expectedLists.[5,1] <- [ [|1|]; [|2|]; [|3|]; [|4|]; [|5|] ]
-        expectedLists.[5,2] <- [ [|1; 2|]; [|2; 3|]; [|3; 4|]; [|4; 5|] ]
-        expectedLists.[5,3] <- [ [|1; 2; 3|]; [|2; 3; 4|]; [|3; 4; 5|] ]
-        expectedLists.[5,4] <- [ [|1; 2; 3; 4|]; [|2; 3; 4; 5|] ]
-        expectedLists.[5,5] <- [ [|1; 2; 3; 4; 5|] ]
+        expectedLists.[1,1] <- [ [1] ]
+        expectedLists.[2,1] <- [ [1]; [2] ]
+        expectedLists.[2,2] <- [ [1; 2] ]
+        expectedLists.[3,1] <- [ [1]; [2]; [3] ]
+        expectedLists.[3,2] <- [ [1; 2]; [2; 3] ]
+        expectedLists.[3,3] <- [ [1; 2; 3] ]
+        expectedLists.[4,1] <- [ [1]; [2]; [3]; [4] ]
+        expectedLists.[4,2] <- [ [1; 2]; [2; 3]; [3; 4] ]
+        expectedLists.[4,3] <- [ [1; 2; 3]; [2; 3; 4] ]
+        expectedLists.[4,4] <- [ [1; 2; 3; 4] ]
+        expectedLists.[5,1] <- [ [1]; [2]; [3]; [4]; [5] ]
+        expectedLists.[5,2] <- [ [1; 2]; [2; 3]; [3; 4]; [4; 5] ]
+        expectedLists.[5,3] <- [ [1; 2; 3]; [2; 3; 4]; [3; 4; 5] ]
+        expectedLists.[5,4] <- [ [1; 2; 3; 4]; [2; 3; 4; 5] ]
+        expectedLists.[5,5] <- [ [1; 2; 3; 4; 5] ]
 
         for arraySize = 0 to 5 do
             for windowSize = -1 to 5 do
                 if windowSize <= 0 then
                     CheckThrowsArgumentException (fun () -> List.windowed windowSize [1..arraySize] |> ignore)
                 elif arraySize < windowSize then
-                    Assert.AreEqual(([] : int[] list), List.windowed windowSize [1..arraySize])
+                    Assert.AreEqual(([] : int list list), List.windowed windowSize [1..arraySize])
                 else
                     Assert.AreEqual(expectedLists.[arraySize, windowSize], List.windowed windowSize [1..arraySize])
 

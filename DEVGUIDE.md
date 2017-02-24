@@ -1,117 +1,90 @@
 # F# Compiler, Core Library and Visual F# Tools Open Contribution Repository
 
 This repo is where you can contribute to the F# compiler, core library and the Visual F# Tools.
+To learn what F# is and why it's interesting, go to [fsharp.org](http://fsharp.org). To get a free F# environment, go to [fsharp.org](http://fsharp.org/use/windows).
 
-To learn what F# is and why it's interesting, go to [fsharp.org](http://fsharp.org).
+**Compiler Technical Documentation**
 
-To get a free F# environment, go to [fsharp.org](http://fsharp.org/use/windows).
+The primary technical documents for the F# compiler code are
+
+* [The F# Language and Core Library RFC Process](http://fsharp.github.io/2016/09/26/fsharp-rfc-process.html)
+
+* [The F# Language Specification](http://fsharp.org/specs/language-spec/)
+
+* [The F# Compiler Technical Guide](http://fsharp.github.io/2015/09/29/fsharp-compiler-guide.html) 
+  maintained by contributors to this repository.  Please read
+  and contribute to that guide.
 
 **License**
 > Contributions made to this repo are subject to terms and conditions of the Apache License, Version 2.0. A copy of the license can be found in the [License.txt](License.txt) file at the root of this distribution.
 > By using this source code in any fashion, you are agreeing to be bound by the terms of the Apache License, Version 2.0. You must not remove this notice, or any other, from this software.
 
-**Questions?** If you have questions about the source code, please ask in the issues and discussion forums.
+**Questions?** If you have questions about the source code, please ask in the issues.
 
-## 1.  Building a Proto Compiler
+## Quick Start: Build, Test, Develop
 
-The compiler is compiled as a set of .NET 4.0 components using a bootstrap process. This uses the Last Known Good (LKG) compiler to build.  
-Note that you need the .NET framework 3.5 installed on your machine in order to complete this step.
+### F# Compiler (Linux)
 
-```
-gacutil /i lkg\FSharp-2.0.50726.900\bin\FSharp.Core.dll
-msbuild src\fsharp-proto-build.proj
-```
+Currently you can do on Linux a bootstrap of the Mono version of the compiler.  Full testing is not enabled,
+nor is a .NET Core build of the compiler.
+
+First [install Mono](http://www.mono-project.com/docs/getting-started/install/linux/).   Then:
     
-## 2.  Building an F# (Debug) library and compiler
+    ./build.sh
 
-This uses the proto compiler to build `FSharp.Core.dll`, `FSharp.Compiler.dll`, `fsc.exe`, and `fsi.exe`.
+results will be in ``Debug\net40\bin\...``.  This doesn't do any testing (beyond the bootstrap). You can
+run the compiler ``fsc.exe`` and F# Interactive ``fsi.exe`` by hand to test it.
 
-```
-msbuild src/fsharp-library-build.proj 
-msbuild src/fsharp-compiler-build.proj 
-```
-    
-You can now use the updated F# compiler in `debug\net40\bin\fsc.exe` and F# Interactive in `debug\net40\bin\fsi.exe` to develop and test basic language and tool features.
+These steps are tested under the Linux/Mono configuration(s) in ``.travis.yml`` (Ubuntu).
 
-**Note:** The updated library is not used until you run `update.cmd`, see below.  The updated compiler is not run 'pre-compiled' until you run `update.cmd -ngen`, see below.
+### F# Compiler (Windows)
 
-## 3. Full Steps Before Running Tests
+On Windows you can build the F# compiler for .NET Framework as follows:
 
-See [TESTGUIDE.md](TESTGUIDE.md) for full details on how to run tests.
-    
-Prior to a **Debug** test run, you need to complete **all** of these steps:
+    build.cmd
 
-```
-msbuild src/fsharp-library-build.proj
-msbuild src/fsharp-compiler-build.proj
-msbuild src/fsharp-typeproviders-build.proj
-msbuild src/fsharp-library-build.proj /p:TargetFramework=net20
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable47
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable7
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable78
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable259
-msbuild src/fsharp-library-unittests-build.proj
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable47
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable7
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable78
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable259
-src\update.cmd debug -ngen
-tests\BuildTestTools.cmd debug 
-```
+This is the same as
 
-[Optional] If testing the Visual Studio bits (see below) you will also need:
+    build.cmd net40
 
-```
-msbuild vsintegration\fsharp-vsintegration-build.proj
-msbuild vsintegration\fsharp-vsintegration-unittests-build.proj
-```    
+There are various qualifiers:
 
-Prior to a **Release** test run, you need to do **all** of these:
+    build.cmd release         -- build release (the default)
+    build.cmd debug           -- build debug instead of release
 
-```
-msbuild src/fsharp-library-build.proj  /p:Configuration=Release
-msbuild src/fsharp-compiler-build.proj  /p:Configuration=Release
-msbuild src/fsharp-typeproviders-build.proj  /p:Configuration=Release
-msbuild src/fsharp-library-build.proj /p:TargetFramework=net20 /p:Configuration=Release
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable47 /p:Configuration=Release
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable7 /p:Configuration=Release
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable78 /p:Configuration=Release
-msbuild src/fsharp-library-build.proj /p:TargetFramework=portable259 /p:Configuration=Release
-msbuild src/fsharp-library-unittests-build.proj  /p:Configuration=Release
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable47 /p:Configuration=Release
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable7 /p:Configuration=Release
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable78 /p:Configuration=Release
-msbuild src/fsharp-library-unittests-build.proj /p:TargetFramework=portable259 /p:Configuration=Release
-src\update.cmd release -ngen
-tests\BuildTestTools.cmd release 
-```
+    build.cmd net40           -- build .NET Framework compiler (the default)
+    build.cmd coreclr         -- build .NET Core compiler 
+    build.cmd vs              -- build the Visual F# IDE Tools (see below)
+    build.cmd pcls            -- build the PCL FSharp.Core libraries
+    build.cmd all             -- build all 
 
-[Optional] If testing the Visual F# IDE Tools (see below) you will also need:
+    build.cmd proto           -- force the rebuild of the Proto bootstrap compiler in addition to other things
 
-```
-msbuild vsintegration\fsharp-vsintegration-build.proj /p:Configuration=Release
-msbuild vsintegration\fsharp-vsintegration-unittests-build.proj /p:Configuration=Release
-```
+    build.cmd test            -- build default targets, run suitable tests
+    build.cmd net40 test      -- build net40, run suitable tests
+    build.cmd coreclr test    -- build coreclr, run suitable tests
+    build.cmd vs test         -- build Visual F# IDE Tools, run all tests (see below)
+    build.cmd all test        -- build all, run all tests
 
-## 4. [Optional] Build and Install the Visual F# IDE Tools
+    build.cmd test-smoke      -- build, run smoke tests
+    build.cmd test-net40-fsharp     -- build, run tests\fsharp suite for .NET Framework
+    build.cmd test-net40-fsharpqa   -- build, run tests\fsharpqa suite for .NET Framework
 
-To build the VS components:
+After you build the first time you can open and use this solution:
 
-```
-msbuild vsintegration\fsharp-vsintegration-build.proj
-```
+    .\FSharp.sln
 
-To install the VS components:
+or just build it directly:
 
-1. Ensure that the VSIX package is uninstalled.
- - In VS, select Tools/Extensions and Updates
- - If the package `VisualStudio.FSharp.EnableOpenSource` is installed, select Uninstall
-1. Run ```debug\net40\bin\EnableOpenSource.vsix```
-1. Restart Visual Studio, it should now be running your freshly-built Visual F# IDE Tools.
+    msbuild FSharp.sln 
 
-### Notes on the build
+Building ``FSharp.sln`` builds nearly everything. However building portable profiles of 
+FSharp.Core.dll is not included.  If you are just developing the core compiler and library
+then building the solution will be enough.
 
-1. The `update.cmd` script adds the built `FSharp.Core` to the GAC, adds required strong name validation skips, and NGens the compiler and libraries. This requires admin privileges.
+### Notes on the .NET Framework build
+
+1. The `update.cmd` script adds required strong name validation skips, and NGens the compiler and libraries. This requires admin privileges.
 1. The compiler binaries produced are "private" and strong-named signed with a test key.
 1. Some additional tools are required to build the compiler, notably `fslex.exe`, `fsyacc.exe`, `FSharp.PowerPack.Build.Tasks.dll`, `FsSrGen.exe`, `FSharp.SRGen.Build.Tasks.dll`, and the other tools found in the `lkg` directory.
 1. The overall bootstrapping process executes as follows
@@ -119,3 +92,79 @@ To install the VS components:
  - We use this compiler to compile the source in this distribution, to produce a "proto" compiler, dropped to the `proto` directory. When run, this compiler still relies on `FSharp.Core.dll` with version X.
  - We use the proto compiler to compile the source for `FSharp.Core.dll` in this distribution.
  - We use the proto compiler to compile the source for `FSharp.Compiler.dll`, `fsc.exe`, `fsi.exe`, and other binaries found in this distribution.
+
+### Configuring proxy server
+
+If you are behind a proxy server, NuGet client tool must be configured to use it:
+
+    .nuget\nuget.exe config -set http_proxy=proxy.domain.com:8080 -ConfigFile .nuget\NuGet.Config
+    .nuget\nuget.exe config -set http_proxy.user=user_name -ConfigFile .nuget\NuGet.Config
+    .nuget\nuget.exe config -set http_proxy.password=user_password -ConfigFile .nuget\NuGet.Config
+
+Where you should set proper proxy address, user name and password.
+
+# The Visual F# IDE Tools (Windows Only)
+
+To build and test Visual F# IDE Tools, you must use the latest version of [Visual Studio 2017 RC](https://www.visualstudio.com/vs/visual-studio-2017-rc/#downloadvs).  See the section titled "Development tools" in the [readme](README.md).
+
+    build.cmd vs              -- build the Visual F# IDE Tools (see below)
+    build.cmd vs test         -- build Visual F# IDE Tools, run all tests (see below)
+
+Use ``VisualFSharp.sln`` if you're building the Visual F# IDE Tools.
+
+
+## [Optional] Install the Visual F# IDE Tools  (Windows Only)
+
+At time of writing, the Visual F# IDE Tools can only be installed into the latest Visual Studio 2017 RC releases.
+The new builds of the Visual F# IDE Tools can no longer be installed into Visual Studio 2015.
+
+You can install Visual Studio 2017 RC from https://www.visualstudio.com/vs/visual-studio-2017-rc/#downloadvs.
+
+**Note:** This step will install a VSIX extension into Visual Studio "Next" that changes the Visual F# IDE Tools 
+components installed in that VS installation.  You can revert this step by disabling or uninstalling the addin.
+
+For **Debug**, uninstall then reinstall:
+
+    VSIXInstaller.exe /a /u:"VisualFSharp"
+    VSIXInstaller.exe /a debug\net40\bin\VisualFSharpOpenSource.vsix
+
+For **Release**, uninstall then reinstall:
+
+    VSIXInstaller.exe /a /u:"VisualFSharp"
+    VSIXInstaller.exe /a release\net40\bin\VisualFSharpOpenSource.vsix
+
+Restart Visual Studio, it should now be running your freshly-built Visual F# IDE Tools with updated F# Interactive.
+
+### [Optional] F5 testing of local changes
+
+To test your changes locally _without_ overwriting your default installed F# tools, set the `VisualFSharp\Vsix\VisualFSharpOpenSource`
+project as the startup project.  When you hit F5 a new instance of Visual Studio will be started in the `FSharpDev` hive with your
+changes, but the root (default) hive will remain untouched.
+
+### [Optional] Rapid deployment of incremental changes to Visual F# IDE Tools components
+
+For the brave, you can rapidly deploy incrementally updated versions of Visual F# IDE Tool components such as ``FSHarp.Editor.dll`` by copying them directly into the extension directory in your user AppData folder:
+
+    xcopy /y debug\net40\bin\FSharp.* "%USERPROFILE%\AppData\Local\Microsoft\VisualStudio\15.0_7c5620b7FSharpDev\Extensions\Microsoft.VisualFSharpTools\Visual F# Tools\15.4.1.9055"
+
+This gives a much tighter inner development loop than uninstalling/reinstalling the VSIX, as you do not have to restart VIsual Studio. Caveat emptor.
+
+### [Optional] Clobber the F# SDK on the machine
+
+**Note:** Step #3 below will clobber the machine-wide installed F# SDK on your machine. This replaces the ``fsi.exe``/``fsiAnyCpu.exe`` used by Visual F# Interactive and the ``fsc.exe`` used by ``Microsoft.FSharp.targets``.  Repairing Visual Studio 15 is currently the only way to revert this step.  
+
+For **Debug**:
+
+1. Run ``vsintegration\update-vsintegration.cmd debug`` (clobbers the installed F# SDK)
+
+For **Release**:
+
+1. Run ``vsintegration\update-vsintegration.cmd release`` (clobbers the installed F# SDK)
+
+
+
+
+## Resources
+
+The primary technical guide to the core compiler code is [The F# Compiler Technical Guide](http://fsharp.github.io/2015/09/29/fsharp-compiler-guide.html).  Please read and contribute to that guide.
+

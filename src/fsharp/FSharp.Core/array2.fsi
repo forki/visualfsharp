@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Collections
 
@@ -39,7 +39,7 @@ namespace Microsoft.FSharp.Collections
 
         /// <summary>Builds a new array whose elements are the same as the input array.</summary>
         ///
-        /// <remarks>For non-zero-based arrays the basing on an input array will be propogated to the output
+        /// <remarks>For non-zero-based arrays the basing on an input array will be propagated to the output
         /// array.</remarks>
         ///
         /// <param name="array">The input array.</param>
@@ -95,8 +95,7 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("ZeroCreate")>]
         val zeroCreate : length1:int -> length2:int -> 'T[,]
 
-#if FX_NO_BASED_ARRAYS
-#else
+#if !FX_NO_BASED_ARRAYS
         /// <summary>Creates a based array given the dimensions and a generator function to compute the elements.</summary>
         ///
         /// <param name="base1">The base for the first dimension of the array.</param>
@@ -170,7 +169,7 @@ namespace Microsoft.FSharp.Collections
         /// <summary>Builds a new array whose elements are the results of applying the given function
         /// to each of the elements of the array.</summary>
         ///
-        /// <remarks>For non-zero-based arrays the basing on an input array will be propogated to the output
+        /// <remarks>For non-zero-based arrays the basing on an input array will be propagated to the output
         /// array.</remarks>
         ///
         /// <param name="mapping">A function that is applied to transform each item of the input array.</param>

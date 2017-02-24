@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information. -->
+<!-- Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information. -->
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <FSharpSourcesRoot>..\..</FSharpSourcesRoot>
+    <FSharpSourcesRoot>$(MSBuildProjectDirectory)\..\..</FSharpSourcesRoot>
     <Configuration Condition=" '$(Configuration)' == '' ">Proto</Configuration>
   </PropertyGroup>
   <Import Project="$(FSharpSourcesRoot)\FSharpSource.Settings.targets" />
@@ -20,24 +20,38 @@
     <ProjectGuid>{9D7C9060-9263-40EB-8FE3-1E4E3C6D941C}</ProjectGuid>
     <AllowCrossTargeting>true</AllowCrossTargeting>
     <OtherFlags>$(OtherFlags) --stackReserveSize:4096000</OtherFlags>
-    <TargetFrameworkVersion Condition="'$(TargetFramework)'=='net20'">v2.0</TargetFrameworkVersion>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\fscmain.fs">
       <Link>fscmain.fs</Link>
     </Compile>
+    <None Include="fsc-proto.exe.config">
+      <Link>fsc-proto.exe.config</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
-    <Reference Include="$(FSCoreLKGPath)" />
+    <Reference Include="$(FSharpCoreLkgPath)\FSharp.Core.dll" />
     <Reference Include="System" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Runtime.Remoting" />
-    <Reference Include="System.Numerics" Condition="'$(TargetFramework)'=='net40'" />
+    <Reference Include="System.Numerics" Condition="'$(TargetFramework)' == 'net40'" />
     <ProjectReference Include="..\FSharp.Compiler-proto\FSharp.Compiler-proto.fsproj">
       <Project>{33E0FB8C-93DC-4AD7-9DCD-9FBDA6C2F061}</Project>
       <Name>FSharp.Compiler-proto</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(FSharpSourcesRoot)\FSharpSource.targets" />
+  
+  <Target Name="CopyFSharpCoreOptSigFiles" AfterTargets="Build">
+    <ItemGroup>
+        <FSharpCoreOptSigFiles Include="$(FSharpCoreLkgPath)\FSharp.Core.dll" />
+        <FSharpCoreOptSigFiles Include="$(FSharpCoreLkgPath)\FSharp.Core.optdata" />
+        <FSharpCoreOptSigFiles Include="$(FSharpCoreLkgPath)\FSharp.Core.sigdata" />
+        <FSharpCoreOptSigFiles Include="$(FSharpCoreLkgPath)\FSharp.Core.xml" />
+    </ItemGroup>
+    
+    <Copy SourceFiles="@(FSharpCoreOptSigFiles)" DestinationFolder="$(OutputPath)" />
+  </Target>
 </Project>

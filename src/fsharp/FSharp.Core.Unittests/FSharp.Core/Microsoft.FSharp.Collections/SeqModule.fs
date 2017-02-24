@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace FSharp.Core.Unittests.FSharp_Core.Microsoft_FSharp_Collections
 
@@ -21,6 +21,33 @@ Make sure each method works on:
 
 [<TestFixture>]
 type SeqModule() =
+
+    [<Test>]
+    member this.AllPairs() =
+
+        // integer Seq
+        let resultInt = Seq.allPairs (seq [1..7]) (seq [11..17])
+        let expectedInt =
+            seq { for i in 1..7 do
+                    for j in 11..17 do
+                        yield i, j }
+        VerifySeqsEqual expectedInt resultInt
+
+        // string Seq
+        let resultStr = Seq.allPairs (seq ["str3";"str4"]) (seq ["str1";"str2"])
+        let expectedStr = seq ["str3","str1";"str3","str2";"str4","str1";"str4","str2"]
+        VerifySeqsEqual expectedStr resultStr
+
+        // empty Seq
+        VerifySeqsEqual Seq.empty <| Seq.allPairs Seq.empty Seq.empty
+        VerifySeqsEqual Seq.empty <| Seq.allPairs { 1..7 } Seq.empty
+        VerifySeqsEqual Seq.empty <| Seq.allPairs Seq.empty { 1..7 }
+
+        // null Seq
+        CheckThrowsArgumentNullException(fun() -> Seq.allPairs null null |> ignore)
+        CheckThrowsArgumentNullException(fun() -> Seq.allPairs null (seq [1..7]) |> ignore)
+        CheckThrowsArgumentNullException(fun() -> Seq.allPairs (seq [1..7]) null |> ignore)
+        ()
 
     [<Test>]
     member this.CachedSeq_Clear() =
@@ -260,7 +287,19 @@ type SeqModule() =
         let expectedNullSeq = seq [null;null]
         
         VerifySeqsEqual expectedNullSeq NullSeq
+
+        CheckThrowsExn<System.InvalidCastException>(fun () -> 
+            let strings = 
+                integerArray 
+                |> Seq.cast<string>               
+            for o in strings do ()) 
         
+        CheckThrowsExn<System.InvalidCastException>(fun () -> 
+            let strings = 
+                integerArray 
+                |> Seq.cast<string>
+                :> System.Collections.IEnumerable // without this upcast the for loop throws, so it should with this upcast too
+            for o in strings do ()) 
         
         ()
         
@@ -302,7 +341,74 @@ type SeqModule() =
         
         CheckThrowsArgumentNullException (fun () -> Seq.choose funcInt nullSeq |> ignore) 
         ()
-    
+
+    [<Test>]
+    member this.ChunkBySize() =
+
+        let verify expected actual =
+            Seq.zip expected actual
+            |> Seq.iter ((<||) VerifySeqsEqual)
+
+        // int Seq
+        verify [[1..4];[5..8]] <| Seq.chunkBySize 4 {1..8}
+        verify [[1..4];[5..8];[9..10]] <| Seq.chunkBySize 4 {1..10}
+        verify [[1]; [2]; [3]; [4]] <| Seq.chunkBySize 1 {1..4}
+
+        Seq.chunkBySize 2 (Seq.initInfinite id)
+        |> Seq.take 3
+        |> verify [[0;1];[2;3];[4;5]]
+
+        Seq.chunkBySize 1 (Seq.initInfinite id)
+        |> Seq.take 5
+        |> verify [[0];[1];[2];[3];[4]]
+
+        // string Seq
+        verify [["a"; "b"];["c";"d"];["e"]] <| Seq.chunkBySize 2 ["a";"b";"c";"d";"e"]
+
+        // empty Seq
+        verify Seq.empty <| Seq.chunkBySize 3 Seq.empty
+
+        // null Seq
+        let nullSeq:seq<_> = null
+        CheckThrowsArgumentNullException (fun () -> Seq.chunkBySize 3 nullSeq |> ignore)
+
+        // invalidArg
+        CheckThrowsArgumentException (fun () -> Seq.chunkBySize 0 {1..10} |> ignore)
+        CheckThrowsArgumentException (fun () -> Seq.chunkBySize -1 {1..10} |> ignore)
+
+        ()
+
+    [<Test>]
+    member this.SplitInto() =
+
+        let verify expected actual =
+            Seq.zip expected actual
+            |> Seq.iter ((<||) VerifySeqsEqual)
+
+        // int Seq
+        Seq.splitInto 3 {1..10} |> verify (seq [ {1..4}; {5..7}; {8..10} ])
+        Seq.splitInto 3 {1..11} |> verify (seq [ {1..4}; {5..8}; {9..11} ])
+        Seq.splitInto 3 {1..12} |> verify (seq [ {1..4}; {5..8}; {9..12} ])
+
+        Seq.splitInto 4 {1..5} |> verify (seq [ [1..2]; [3]; [4]; [5] ])
+        Seq.splitInto 20 {1..4} |> verify (seq [ [1]; [2]; [3]; [4] ])
+
+        // string Seq
+        Seq.splitInto 3 ["a";"b";"c";"d";"e"] |> verify ([ ["a"; "b"]; ["c";"d"]; ["e"] ])
+
+        // empty Seq
+        VerifySeqsEqual [] <| Seq.splitInto 3 []
+
+        // null Seq
+        let nullSeq:seq<_> = null
+        CheckThrowsArgumentNullException (fun () -> Seq.splitInto 3 nullSeq |> ignore)
+
+        // invalidArg
+        CheckThrowsArgumentException (fun () -> Seq.splitInto 0 [1..10] |> ignore)
+        CheckThrowsArgumentException (fun () -> Seq.splitInto -1 [1..10] |> ignore)
+
+        ()
+
     [<Test>]
     member this.Compare() =
     
@@ -477,7 +583,46 @@ type SeqModule() =
        
         CheckThrowsArgumentNullException(fun () -> Seq.distinctBy funcInt nullSeq  |> ignore) 
         () 
-    
+
+    [<Test>]
+    member this.Except() =
+        // integer Seq
+        let intSeq1 = seq { yield! {1..100}
+                            yield! {1..100} }
+        let intSeq2 = {1..10}
+        let expectedIntSeq = {11..100}
+
+        VerifySeqsEqual expectedIntSeq <| Seq.except intSeq2 intSeq1
+
+        // string Seq
+        let strSeq1 = seq ["a"; "b"; "c"; "d"; "a"]
+        let strSeq2 = seq ["b"; "c"]
+        let expectedStrSeq = seq ["a"; "d"]
+
+        VerifySeqsEqual expectedStrSeq <| Seq.except strSeq2 strSeq1
+
+        // double Seq
+        // Sequences with nan do not behave, due to the F# generic equality comparisons
+//        let floatSeq1 = seq [1.0; 1.0; System.Double.MaxValue; nan; nan]
+//
+//        VerifySeqsEqual [1.0; System.Double.MaxValue; nan; nan] <| Seq.except [] floatSeq1
+//        VerifySeqsEqual [1.0; System.Double.MaxValue] <| Seq.except [nan] floatSeq1
+
+        // empty Seq
+        let emptyIntSeq = Seq.empty<int>
+        VerifySeqsEqual {1..100} <| Seq.except emptyIntSeq intSeq1
+        VerifySeqsEqual emptyIntSeq <| Seq.except intSeq1 emptyIntSeq
+        VerifySeqsEqual emptyIntSeq <| Seq.except emptyIntSeq emptyIntSeq
+        VerifySeqsEqual emptyIntSeq <| Seq.except intSeq1 intSeq1
+
+        // null Seq
+        let nullSeq : seq<int> = null
+        CheckThrowsArgumentNullException(fun () -> Seq.except nullSeq emptyIntSeq |> ignore)
+        CheckThrowsArgumentNullException(fun () -> Seq.except emptyIntSeq nullSeq |> ignore)
+        CheckThrowsArgumentNullException(fun () -> Seq.except nullSeq nullSeq |> ignore)
+
+        ()
+
     [<Test>]
     member this.Exists() =
 

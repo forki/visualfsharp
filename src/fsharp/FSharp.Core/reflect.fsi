@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 /// <summary>This namespace contains constructs for reflecting on the representation of
 /// F# values and types. It augments the design of System.Reflection.</summary>
@@ -29,8 +29,7 @@ type UnionCaseInfo =
     /// <returns>An array of custom attributes.</returns>
     member GetCustomAttributes: attributeType:System.Type -> obj[]
 
-#if FX_NO_CUSTOMATTRIBUTEDATA
-#else
+#if !FX_NO_CUSTOMATTRIBUTEDATA
     /// <summary>Returns the custom attributes data associated with the case.</summary>
     /// <returns>An list of custom attribute data items.</returns>
     member GetCustomAttributesData: unit -> System.Collections.Generic.IList<CustomAttributeData>
@@ -71,8 +70,8 @@ type FSharpValue =
     /// <returns>A function to read the specified field from the record.</returns>
     static member PreComputeRecordFieldReader : info:PropertyInfo -> (obj -> obj)
 
-#if FX_RESHAPED_REFLECTION
-#else
+// These APIs are only internal for portable profile, 7,78 and 259 of FSHarp.Core.dll --- those profiles System.Reflection.BindingFlags
+#if !FX_NO_SYSTEM_BINDINGFLAGS
     /// <summary>Creates an instance of a record type.</summary>
     ///
     /// <remarks>Assumes the given input is a record type.</remarks>
@@ -161,7 +160,7 @@ type FSharpValue =
     /// <returns>The description of the union case reader.</returns>
     static member PreComputeUnionTagMemberInfo : unionType:Type  * ?bindingFlags:BindingFlags -> MemberInfo
 
-    /// <summary>Precomputes a function for reading all the fields for a particular discriminator case of a union type</summary>
+    /// <summary>Precompute a function for reading all the fields for a particular discriminator case of a union type</summary>
     ///
     /// <remarks>Using the computed function will typically be faster than executing a corresponding call to GetFields</remarks>
     /// <param name="unionCase">The description of the union case to read.</param>
@@ -169,7 +168,7 @@ type FSharpValue =
     /// <returns>A function to for reading the fields of the given union case.</returns>
     static member PreComputeUnionReader       : unionCase:UnionCaseInfo  * ?bindingFlags:BindingFlags -> (obj -> obj[])
 
-    /// <summary>Precomputes a function for constructing a discriminated union value for a particular union case. </summary>
+    /// <summary>Precompute a function for constructing a discriminated union value for a particular union case. </summary>
     /// <param name="unionCase">The description of the union case.</param>
     /// <param name="bindingFlags">Optional binding flags.</param>
     /// <returns>A function for constructing values of the given union case.</returns>
@@ -216,7 +215,7 @@ type FSharpValue =
     /// <returns>An array of the fields from the given tuple.</returns>
     static member GetTupleFields: tuple:obj -> obj []
     
-    /// <summary>Precomputes a function for reading the values of a particular tuple type</summary>
+    /// <summary>Precompute a function for reading the values of a particular tuple type</summary>
     ///
     /// <remarks>Assumes the given type is a TupleType.
     /// If not, ArgumentException is raised during pre-computation.</remarks>
@@ -231,7 +230,7 @@ type FSharpValue =
     /// <returns>The description of the tuple element and an optional type and index if the tuple is big.</returns>
     static member PreComputeTuplePropertyInfo: tupleType:Type * index:int -> PropertyInfo * (Type * int) option
     
-    /// <summary>Precomputes a function for reading the values of a particular tuple type</summary>
+    /// <summary>Precompute a function for reading the values of a particular tuple type</summary>
     ///
     /// <remarks>Assumes the given type is a TupleType.
     /// If not, ArgumentException is raised during pre-computation.</remarks>
@@ -264,8 +263,7 @@ type FSharpValue =
 /// <summary>Contains operations associated with constructing and analyzing F# types such as records, unions and tuples</summary>
 type FSharpType =
 
-#if FX_RESHAPED_REFLECTION
-#else
+#if !FX_NO_SYSTEM_BINDINGFLAGS
     /// <summary>Reads all the fields from a record value, in declaration order</summary>
     ///
     /// <remarks>Assumes the given input is a record value. If not, ArgumentException is raised.</remarks>
@@ -323,6 +321,16 @@ type FSharpType =
     /// <param name="types">An array of types for the tuple elements.</param>
     /// <returns>The type representing the tuple containing the input elements.</returns>
     static member MakeTupleType: types:Type[] -> Type
+
+    /// <summary>Returns a <c>System.Type</c> representing an F# tuple type with the given element types</summary>
+    /// <param name="types">An array of types for the tuple elements.</param>
+    /// <returns>The type representing the tuple containing the input elements.</returns>
+    static member MakeTupleType: asm:Assembly * types:Type[] -> Type
+
+    /// <summary>Returns a <c>System.Type</c> representing an F# struct tuple type with the given element types</summary>
+    /// <param name="types">An array of types for the tuple elements.</param>
+    /// <returns>The type representing the struct tuple containing the input elements.</returns>
+    static member MakeStructTupleType: asm:Assembly * types:Type[] -> Type
 
     /// <summary>Return true if the <c>typ</c> is a representation of an F# tuple type </summary>
     /// <param name="typ">The type to check.</param>
@@ -440,7 +448,7 @@ module FSharpReflectionExtensions =
         /// <returns>The description of the union case reader.</returns>
         static member PreComputeUnionTagMemberInfo : unionType:Type * ?allowAccessToPrivateRepresentation : bool -> MemberInfo
 
-        /// <summary>Precomputes a function for reading all the fields for a particular discriminator case of a union type</summary>
+        /// <summary>Precompute a function for reading all the fields for a particular discriminator case of a union type</summary>
         ///
         /// <remarks>Using the computed function will typically be faster than executing a corresponding call to GetFields</remarks>
         /// <param name="unionCase">The description of the union case to read.</param>
@@ -448,7 +456,7 @@ module FSharpReflectionExtensions =
         /// <returns>A function to for reading the fields of the given union case.</returns>
         static member PreComputeUnionReader       : unionCase:UnionCaseInfo * ?allowAccessToPrivateRepresentation : bool -> (obj -> obj[])
 
-        /// <summary>Precomputes a function for constructing a discriminated union value for a particular union case. </summary>
+        /// <summary>Precompute a function for constructing a discriminated union value for a particular union case. </summary>
         /// <param name="unionCase">The description of the union case.</param>
         /// <param name="allowAccessToPrivateRepresentation">Optional flag that denotes accessibility of the private representation.</param>    
         /// <returns>A function for constructing values of the given union case.</returns>
@@ -515,91 +523,13 @@ module FSharpReflectionExtensions =
         /// <returns>True if the type check is an F# exception.</returns>
         static member IsExceptionRepresentation: exceptionType:Type * ?allowAccessToPrivateRepresentation : bool -> bool
 
-#if FX_RESHAPED_REFLECTION
-
-namespace Microsoft.FSharp.Core
-
-open System
-open System.Reflection
-
-module internal ReflectionAdapters =
-
-    [<System.Flags>]
-    type BindingFlags =
-        | DeclaredOnly  = 2
-        | Instance      = 4 
-        | Static        = 8
-        | Public        = 16
-        | NonPublic     = 32
-
-    val isDeclaredFlag  : BindingFlags -> bool
-    val isPublicFlag    : BindingFlags -> bool
-    val isStaticFlag    : BindingFlags -> bool
-    val isInstanceFlag  : BindingFlags -> bool
-    val isNonPublicFlag : BindingFlags -> bool
-    val isAcceptable    : BindingFlags -> isStatic : bool -> isPublic : bool -> bool    
-
-    [<System.Flags>]
-    type TypeCode = 
-        | Int32     = 0
-        | Int64     = 1
-        | Byte      = 2
-        | SByte     = 3
-        | Int16     = 4
-        | UInt16    = 5
-        | UInt32    = 6
-        | UInt64    = 7
-        | Single    = 8
-        | Double    = 9
-        | Decimal   = 10
-        | Other     = 11
-
-    type System.Type with
-        member GetNestedType : name : string * bindingFlags : BindingFlags -> Type
-        member GetMethods : bindingFlags : BindingFlags -> MethodInfo[]
-        member GetFields : bindingFlags : BindingFlags -> FieldInfo[]
-        member GetProperties : ?bindingFlags : BindingFlags -> PropertyInfo[]
-        member GetMethod : name : string * ?bindingFlags : BindingFlags -> MethodInfo
-        member GetProperty : name : string * bindingFlags : BindingFlags -> PropertyInfo
-        member IsGenericTypeDefinition : bool
-        member GetGenericArguments : unit -> Type[]
-        member BaseType : Type
-        member GetConstructor : parameterTypes : Type[] -> ConstructorInfo
-        member GetInterfaces : unit -> Type[]
-        member GetConstructors : ?bindingFlags : BindingFlags -> ConstructorInfo[]
-        member GetMethods : unit -> MethodInfo[]
-        member Assembly : Assembly
-        member IsSubclassOf : Type -> bool
-        member IsEnum : bool
-        member GetField : string * BindingFlags -> FieldInfo
-        member GetProperty : string * Type * Type[] -> PropertyInfo
-        static member GetTypeCode : System.Type -> TypeCode
-
-    type System.Reflection.Assembly with
-        member GetTypes : unit -> Type[]
-
-    type System.Reflection.MemberInfo with
-        member GetCustomAttributes : attributeType : Type * inherits : bool -> obj[]
-
-    type System.Reflection.MethodInfo with
-        member GetCustomAttributes : inherits : bool -> obj[]
-
-    type System.Reflection.PropertyInfo with
-        member GetGetMethod : bool -> MethodInfo
-        member GetSetMethod : bool -> MethodInfo
-
-    type System.Delegate with
-        static member CreateDelegate :  Type * MethodInfo -> System.Delegate
-        static member CreateDelegate :  Type * obj * MethodInfo -> System.Delegate
-            
-#endif
 
 namespace Microsoft.FSharp.Reflection
 
 open Microsoft.FSharp.Core
 
 module internal ReflectionUtils = 
-#if FX_RESHAPED_REFLECTION
+#if FX_NO_SYSTEM_BINDINGFLAGS
     type BindingFlags = ReflectionAdapters.BindingFlags
 #else
     type BindingFlags = System.Reflection.BindingFlags

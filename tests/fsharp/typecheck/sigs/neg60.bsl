@@ -58,17 +58,13 @@ neg60.fs(65,19,65,24): typecheck error FS3087: The custom operation 'where' refe
 neg60.fs(65,19,65,24): typecheck error FS3087: The custom operation 'where' refers to a method which is overloaded. The implementations of custom operations may not be overloaded.
 
 neg60.fs(65,19,65,38): typecheck error FS0001: This expression was expected to have type
-    bool    
+    'bool'    
 but here has type
-    unit    
+    'unit'    
 
 neg60.fs(71,36,71,40): typecheck error FS0043: The type 'System.Nullable<int>' does not have 'null' as a proper value. To create a null value for a Nullable type use 'System.Nullable()'.
 
-neg60.fs(77,20,77,22): typecheck error FS0001: The type 'System.Nullable<int>' does not support the operator '?>='. Consider opening the module 'Microsoft.FSharp.Linq.NullableOperators'.
-
 neg60.fs(77,16,77,19): typecheck error FS0043: The type 'System.Nullable<int>' does not support the operator '?>='. Consider opening the module 'Microsoft.FSharp.Linq.NullableOperators'.
-
-neg60.fs(78,20,78,22): typecheck error FS0001: None of the types 'System.Nullable<int>, int' support the operator '?>='. Consider opening the module 'Microsoft.FSharp.Linq.NullableOperators'.
 
 neg60.fs(78,16,78,19): typecheck error FS0043: None of the types 'System.Nullable<int>, int' support the operator '?>='. Consider opening the module 'Microsoft.FSharp.Linq.NullableOperators'.
 
@@ -82,4 +78,4 @@ neg60.fs(80,19,80,20): typecheck error FS0043: Expecting a type supporting the o
 
 neg60.fs(81,22,81,34): typecheck error FS0002: This function takes too many arguments, or is used in a context where a function is not expected
 
-neg60.fs(87,14,87,15): typecheck error FS0001: The type 'System.Nullable<int>' does not support the operator '?=?'. Consider opening the module 'Microsoft.FSharp.Linq.NullableOperators'.
+neg60.fs(87,10,87,13): typecheck error FS0043: The type 'System.Nullable<int>' does not support the operator '?=?'. Consider opening the module 'Microsoft.FSharp.Linq.NullableOperators'.

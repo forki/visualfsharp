@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 /// Functions associated with writing binaries which 
 /// vary between supported implementations of the CLI Common Language 
@@ -7,27 +7,31 @@
 /// The implementation of the functions can be found in ilsupp-*.fs
 module internal Microsoft.FSharp.Compiler.AbstractIL.Internal.Support
 
-
-type PdbReader
+#if !FX_NO_PDB_WRITER
 type PdbWriter
-val pdbReadClose: PdbReader -> unit
 val pdbInitialize : string -> string -> PdbWriter
-val absilWriteGetTimeStamp: unit -> int32
+#endif
+#if !FX_NO_PDB_READER
+type PdbReader
+val pdbReadClose: PdbReader -> unit
+#endif
 
+val absilWriteGetTimeStamp: unit -> int32
 
 open System
 open System.Runtime.InteropServices
+#if FX_NO_SYMBOLSTORE
+#else
 open System.Diagnostics.SymbolStore
+#endif
 open Internal.Utilities
 open Microsoft.FSharp.Compiler.AbstractIL
 open Microsoft.FSharp.Compiler.AbstractIL.Internal
 open Microsoft.FSharp.Compiler.AbstractIL.IL 
 
+#if !FX_NO_LINKEDRESOURCES
 type IStream = System.Runtime.InteropServices.ComTypes.IStream
-
-
-/// Takes the output file name and returns debug file name.
-val getDebugFileName: string -> string
+#endif
 
 /// Unmanaged resource file linker - for native resources (not managed ones).
 /// The function may be called twice, once with a zero-RVA and
@@ -35,9 +39,12 @@ val getDebugFileName: string -> string
 /// required buffer is returned.
 type PEFileType = X86 | X64
 
+#if !FX_NO_LINKEDRESOURCES
 val linkNativeResources: unlinkedResources:byte[] list ->  rva:int32 -> PEFileType -> tempFilePath:string -> byte[]
 val unlinkResource: int32 -> byte[] -> byte[]
+#endif
 
+#if !FX_NO_PDB_WRITER
 /// PDB reader and associated types
 type PdbDocument
 type PdbMethod
@@ -76,8 +83,9 @@ val pdbScopeGetLocals: PdbMethodScope -> PdbVariable array
 val pdbVariableGetName: PdbVariable -> string
 val pdbVariableGetSignature: PdbVariable -> byte[]
 val pdbVariableGetAddressAttributes: PdbVariable -> int32 (* kind *) * int32 (* addrField1 *)
+#endif
 
-
+#if !FX_NO_PDB_WRITER
 //---------------------------------------------------------------------
 // PDB writer.
 //---------------------------------------------------------------------
@@ -87,7 +95,7 @@ type PdbDocumentWriter
 type idd =
     { iddCharacteristics: int32;
       iddMajorVersion: int32; (* actually u16 in IMAGE_DEBUG_DIRECTORY *)
-      iddMinorVersion: int32; (* acutally u16 in IMAGE_DEBUG_DIRECTORY *)
+      iddMinorVersion: int32; (* actually u16 in IMAGE_DEBUG_DIRECTORY *)
       iddType: int32;
       iddData: byte[];}
 
@@ -95,7 +103,7 @@ val pdbInitialize:
     string (* .exe/.dll already written and closed *) -> 
     string  (* .pdb to write *) ->
     PdbWriter
-val pdbClose: PdbWriter -> unit
+val pdbClose: PdbWriter -> string -> string -> unit
 val pdbCloseDocument : PdbDocumentWriter -> unit
 val pdbSetUserEntryPoint: PdbWriter -> int32 -> unit
 val pdbDefineDocument: PdbWriter -> string -> PdbDocumentWriter
@@ -106,7 +114,8 @@ val pdbCloseScope: PdbWriter -> int -> unit
 val pdbDefineLocalVariable: PdbWriter -> string -> byte[] -> int32 -> unit
 val pdbSetMethodRange: PdbWriter -> PdbDocumentWriter -> int -> int -> PdbDocumentWriter -> int -> int -> unit
 val pdbDefineSequencePoints: PdbWriter -> PdbDocumentWriter -> (int * int * int * int * int) array -> unit
-val pdbGetDebugInfo: PdbWriter -> idd
+val pdbWriteDebugInfo: PdbWriter -> idd
+#endif
 
 //---------------------------------------------------------------------
 // Strong name signing
@@ -115,12 +124,13 @@ val pdbGetDebugInfo: PdbWriter -> idd
 type keyContainerName = string
 type keyPair = byte[]
 type pubkey = byte[]
+type pubkeyOptions = byte[] * bool
 
 val signerOpenPublicKeyFile: string -> pubkey 
 val signerOpenKeyPairFile: string -> keyPair 
+val signerSignatureSize: pubkey -> int 
 val signerGetPublicKeyForKeyPair: keyPair -> pubkey 
 val signerGetPublicKeyForKeyContainer: string -> pubkey 
 val signerCloseKeyContainer: keyContainerName -> unit 
-val signerSignatureSize: pubkey -> int 
 val signerSignFileWithKeyPair: string -> keyPair -> unit 
 val signerSignFileWithKeyContainer: string -> keyContainerName -> unit

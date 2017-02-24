@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 module internal Microsoft.FSharp.Compiler.AbstractIL.Internal.Library 
 #nowarn "1178" // The struct, record or union type 'internal_instr_extension' is not structurally comparable because the type
@@ -7,23 +7,57 @@ module internal Microsoft.FSharp.Compiler.AbstractIL.Internal.Library
 open System
 open System.Collections
 open System.Collections.Generic
+open System.Reflection
 open Internal.Utilities
 open Internal.Utilities.Collections
+open Microsoft.FSharp.Compiler.AbstractIL.Diagnostics
+
+#if FX_RESHAPED_REFLECTION
+open Microsoft.FSharp.Core.ReflectionAdapters
+#endif
 
 // Logical shift right treating int32 as unsigned integer.
 // Code that uses this should probably be adjusted to use unsigned integer types.
 let (>>>&) (x:int32) (n:int32) = int32 (uint32 x >>> n)
 
-let notlazy v = Lazy.CreateFromValue v
+let notlazy v = Lazy<_>.CreateFromValue v
 
-let isSome x = match x with None -> false | _ -> true
-let isNone x = match x with None -> true | _ -> false
-let isNil x = match x with [] -> true | _ -> false
-let nonNil x = match x with [] -> false | _ -> true
-let isNull (x : 'T) = match (x :> obj) with null -> true | _ -> false
-let isNonNull (x : 'T) = match (x :> obj) with null -> false | _ -> true
-let nonNull msg x = if isNonNull x then x else failwith ("null: " ^ msg) 
+let inline isNil l = List.isEmpty l
+let inline isNonNull x = not (isNull x)
+let inline nonNull msg x = if isNull x then failwith ("null: " ^ msg) else x
 let (===) x y = LanguagePrimitives.PhysicalEquality x y
+
+//---------------------------------------------------------------------
+// Library: ReportTime
+//---------------------------------------------------------------------
+let reportTime =
+    let tFirst = ref None     
+    let tPrev = ref None     
+    fun showTimes descr ->
+        if showTimes then 
+            let t = System.Diagnostics.Process.GetCurrentProcess().UserProcessorTime.TotalSeconds
+            let prev = match !tPrev with None -> 0.0 | Some t -> t
+            let first = match !tFirst with None -> (tFirst := Some t; t) | Some t -> t
+            dprintf "ilwrite: TIME %10.3f (total)   %10.3f (delta) - %s\n" (t - first) (t - prev) descr
+            tPrev := Some t
+
+//-------------------------------------------------------------------------
+// Library: projections
+//------------------------------------------------------------------------
+
+[<Struct>]
+/// An efficient lazy for inline storage in a class type. Results in fewer thunks.
+type InlineDelayInit<'T when 'T : not struct> = 
+    new (f: unit -> 'T) = {store = Unchecked.defaultof<'T>; func = System.Func<_>(f) } 
+    val mutable store : 'T
+    val mutable func : System.Func<'T>
+    member x.Value = 
+        match x.func with 
+        | null -> x.store 
+        | _ -> 
+        let res = System.Threading.LazyInitializer.EnsureInitialized(&x.store, x.func) 
+        x.func <- Unchecked.defaultof<_>
+        res
 
 //-------------------------------------------------------------------------
 // Library: projections
@@ -48,8 +82,6 @@ module Order =
 
 module Array = 
 
-    let take n xs = xs |> Seq.take n |> Array.ofSeq
-
     let mapq f inp =
         match inp with
         | [| |] -> inp
@@ -62,13 +94,6 @@ module Array =
                 if not (inp.[i] === res.[i]) then eq <- false;
                 i <- i + 1
             if eq then inp else res
-
-    let forall2 f (arr1:'T array) (arr2:'T array) =
-        let len1 = arr1.Length 
-        let len2 = arr2.Length 
-        if len1 <> len2 then invalidArg "Array.forall2" "len1"
-        let rec loop i = (i >= len1) || (f arr1.[i] arr2.[i] && loop (i+1))
-        loop 0
 
     let lengthsEqAndForall2 p l1 l2 = 
         Array.length l1 = Array.length l2 &&
@@ -83,19 +108,6 @@ module Array =
             res.[i] <- h';
             acc <- s'
         res, acc
-
-
-    // REVIEW: systematically eliminate foldMap/mapFold duplication. 
-    // They only differ by the tuple returned by the function.
-    let foldMap f s l = 
-        let mutable acc = s
-        let n = Array.length l
-        let mutable res = Array.zeroCreate n
-        for i = 0 to n - 1 do
-            let s',h' = f acc l.[i]
-            res.[i] <- h'
-            acc <- s'
-        acc, res
 
     let order (eltOrder: IComparer<'T>) = 
         { new IComparer<array<'T>> with 
@@ -151,12 +163,10 @@ module Option =
         | None -> dflt 
         | Some x -> x
 
-    // REVIEW: systematically eliminate foldMap/mapFold duplication
-    let foldMap f z l = 
-        match l with 
-        | None   -> z,None
-        | Some x -> let z,x = f z x
-                    z,Some x
+    let orElse dflt opt = 
+        match opt with 
+        | None -> dflt()
+        | res -> res
 
     let fold f z x = 
         match x with 
@@ -165,6 +175,11 @@ module Option =
 
 
 module List = 
+
+#if FX_RESHAPED_REFLECTION
+    open PrimReflectionAdapters
+    open Microsoft.FSharp.Core.ReflectionAdapters
+#endif
 
     let sortWithOrder (c: IComparer<'T>) elements = List.sortWith (Order.toFunction c) elements
     
@@ -292,14 +307,9 @@ module List =
                       | x::xs,y::ys -> let cxy = eltOrder.Compare(x,y)
                                        if cxy=0 then loop xs ys else cxy 
                   loop xs ys }
-
-
-    let rec last l = match l with [] -> failwith "last" | [h] -> h | _::t -> last t
+    
     module FrontAndBack = 
         let (|NonEmpty|Empty|) l = match l with [] -> Empty | _ -> NonEmpty(frontAndBack l)
-
-    let replicate x n = 
-        Array.toList (Array.create x n)
 
     let range n m = [ n .. m ]
 
@@ -315,32 +325,23 @@ module List =
         | [] -> false
         | ((h,_)::t) -> x = h || memAssoc x t
 
-    let rec contains x l = match l with [] -> false | h::t -> x = h || contains x t
-
     let rec memq x l = 
         match l with 
         | [] -> false 
         | h::t -> LanguagePrimitives.PhysicalEquality x h || memq x t
 
-    let mem x l = contains x l
-
     // must be tail recursive 
-    let mapFold f s l = 
+    let mapFold (f:'a -> 'b -> 'c * 'a) (s:'a) (l:'b list) : 'c list * 'a = 
         // microbenchmark suggested this implementation is faster than the simpler recursive one, and this function is called a lot
         let mutable s = s
         let mutable r = []
-        let mutable l = l
-        let mutable finished = false
-        while not finished do
-          match l with
-          | x::xs -> let x',s' = f s x
-                     s <- s'
-                     r <- x' :: r
-                     l <- xs
-          | _ -> finished <- true
+        for x in l do
+            let x',s' = f s x
+            s <- s'
+            r <- x' :: r
         List.rev r, s
 
-    // note: not tail recursive 
+    // Not tail recursive 
     let rec mapFoldBack f l s = 
         match l with 
         | [] -> ([],s)
@@ -360,9 +361,6 @@ module List =
 
     let count pred xs = List.fold (fun n x -> if pred x then n+1 else n) 0 xs
 
-    let rec private repeatAux n x acc = if n <= 0 then acc else repeatAux (n-1) x (x::acc)
-    let repeat n x = repeatAux n x []
-
     // WARNING: not tail-recursive 
     let mapHeadTail fhead ftail = function
       | []    -> []
@@ -372,19 +370,6 @@ module List =
     let collectFold f s l = 
       let l, s = mapFold f s l
       List.concat l, s
-
-    let singleton x = [x]
-
-    // note: must be tail-recursive 
-    let rec private foldMapAux f z l acc =
-      match l with
-      | []    -> z,List.rev acc
-      | x::xs -> let z,x = f z x
-                 foldMapAux f z xs (x::acc)
-                 
-    // note: must be tail-recursive 
-    // REVIEW: systematically eliminate foldMap/mapFold duplication
-    let foldMap f z l = foldMapAux f z l []
 
     let collect2 f xs ys = List.concat (List.map2 f xs ys)
 
@@ -450,40 +435,58 @@ module String =
         else
             None
 
-    let hasPrefix s t = isSome (tryDropPrefix s t)
+    let hasPrefix s t = Option.isSome (tryDropPrefix s t)
     let dropPrefix s t = match (tryDropPrefix s t) with Some(res) -> res | None -> failwith "dropPrefix"
 
     let dropSuffix s t = match (tryDropSuffix s t) with Some(res) -> res | None -> failwith "dropSuffix"
 
 module Dictionary = 
 
-    let inline ofList l = 
-        let dict = new System.Collections.Generic.Dictionary<_,_>(List.length l, HashIdentity.Structural)
-        l |> List.iter (fun (k,v) -> dict.Add(k,v))
-        dict
-
-
-// FUTURE CLEANUP: remove this adhoc collection
-type Hashset<'T> = Dictionary<'T,int>
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Hashset = 
-    let create (n:int) = new Hashset<'T>(n, HashIdentity.Structural)
-    let add (t: Hashset<'T>) x = if not (t.ContainsKey x) then t.[x] <- 0
-    let fold f (t:Hashset<'T>) acc = Seq.fold (fun z (KeyValue(x,_)) -> f x z) acc t 
-    let ofList l = 
-        let t = new Hashset<'T>(List.length l, HashIdentity.Structural)
-        l |> List.iter (fun x -> t.[x] <- 0)
-        t
+    let inline newWithSize (size: int) = System.Collections.Generic.Dictionary<_,_>(size, HashIdentity.Structural)
         
+
 module Lazy = 
     let force (x: Lazy<'T>) = x.Force()
 
-//---------------------------------------------------
-// Lists as sets. This is almost always a bad data structure and should be eliminated from the compiler.  
+//----------------------------------------------------------------------------
+// Singe threaded execution and mutual exclusion
 
-module ListSet =
-    let insert e l =
-        if List.mem e l then l else e::l
+/// Represents a permission active at this point in execution
+type ExecutionToken = interface end
+
+/// Represents a token that indicates execution on the compilation thread, i.e. 
+///   - we have full access to the (partially mutable) TAST and TcImports data structures
+///   - compiler execution may result in type provider invocations when resolving types and members
+///   - we can access various caches in the SourceCodeServices
+///
+/// Like other execution tokens this should be passed via argument passing and not captured/stored beyond
+/// the lifetime of stack-based calls. This is not checked, it is a discipline withinn the compiler code. 
+type CompilationThreadToken() = interface ExecutionToken
+
+/// Represnts a place where we are stating that execution on the compilation thread is required.  The
+/// reason why will be documented in a comment in the code at the callsite.
+let RequireCompilationThread (_ctok: CompilationThreadToken) = ()
+
+/// Represnts a place in the compiler codebase where we are passed a CompilationThreadToken unnecessarily.
+/// This reprents code that may potentially not need to be executed on the compilation thread.
+let DoesNotRequireCompilerThreadTokenAndCouldPossiblyBeMadeConcurrent  (_ctok: CompilationThreadToken) = ()
+
+/// Represnts a place in the compiler codebase where we assume we are executing on a compilation thread
+let AssumeCompilationThreadWithoutEvidence () = Unchecked.defaultof<CompilationThreadToken>
+
+/// Represents a token that indicates execution on a any of several potential user threads calling the F# compiler services.
+type AnyCallerThreadToken() = interface ExecutionToken
+let AssumeAnyCallerThreadWithoutEvidence () = Unchecked.defaultof<AnyCallerThreadToken>
+
+/// A base type for various types of tokens that must be passed when a lock is taken.
+/// Each different static lock should declare a new subtype of this type.
+type LockToken = inherit ExecutionToken
+let AssumeLockWithoutEvidence<'LockTokenType when 'LockTokenType :> LockToken> () = Unchecked.defaultof<'LockTokenType>
+
+/// Encapsulates a lock associated with a particular token-type representing the acquisition of that lock.
+type Lock<'LockTokenType when 'LockTokenType :> LockToken>() = 
+    let lockObj = obj()
+    member __.AcquireLock f = lock lockObj (fun () -> f (AssumeLockWithoutEvidence<'LockTokenType>()))
 
 //---------------------------------------------------
 // Misc
@@ -498,73 +501,157 @@ type ResultOrException<'TResult> =
     | Result of 'TResult
     | Exception of System.Exception
                      
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ResultOrException = 
 
-//-------------------------------------------------------------------------
-// Library: extensions to flat list  (immutable arrays)
-//------------------------------------------------------------------------
-#if FLAT_LIST_AS_ARRAY_STRUCT
-//#else
-module FlatList =
+    let success a = Result a
 
-    let order (eltOrder: IComparer<_>) =
-        { new IComparer<FlatList<_>> with 
-            member __.Compare(xs,ys) =
-                  match xs.array,ys.array with 
-                  | null,null -> 0
-                  | _,null -> 1
-                  | null,_ -> -1
-                  | arr1,arr2 -> Array.order eltOrder arr1 arr2 }
+    let raze (b:exn) = Exception b
 
-    let mapq f (x:FlatList<_>) = 
-        match x.array with 
-        | null -> x
-        | arr -> 
-            let arr' = Array.map f arr in 
-            let n = arr.Length in 
-            let rec check i = if i >= n then true else arr.[i] === arr'.[i] && check (i+1) 
-            if check 0 then x else FlatList(arr')
+    // map
+    let (|?>) res f = 
+        match res with 
+        | Result x -> Result(f x )
+        | Exception err -> Exception err
+  
+    let ForceRaise res = 
+        match res with 
+        | Result x -> x
+        | Exception err -> raise err
 
-    let mapFold f acc (x:FlatList<_>) = 
-        match x.array with
-        | null -> 
-            FlatList.Empty,acc
-        | arr -> 
-            let  arr,acc = Array.mapFold f acc x.array
-            FlatList(arr),acc
+    let otherwise f x =
+        match x with 
+        | Result x -> success x
+        | Exception _err -> f()
 
-    // REVIEW: systematically eliminate foldMap/mapFold duplication
-    let foldMap f acc (x:FlatList<_>) = 
-        match x.array with
-        | null -> 
-            acc,FlatList.Empty
-        | arr -> 
-            let  acc,arr = Array.foldMap f acc x.array
-            acc,FlatList(arr)
-#endif
-#if FLAT_LIST_AS_LIST
+[<RequireQualifiedAccess>] 
+type ValueOrCancelled<'TResult> =
+    | Value of 'TResult
+    | Cancelled of OperationCanceledException
 
-#else
+/// Represents a cancellable computation with explicit representation of a cancelled result.
+///
+/// A cancellable computation is passed may be cancelled via a CancellationToken, which is propagated implicitly.  
+/// If cancellation occurs, it is propagated as data rather than by raising an OperationCancelledException.  
+type Cancellable<'TResult> = Cancellable of (System.Threading.CancellationToken -> ValueOrCancelled<'TResult>)
 
-module FlatList =
-    let toArray xs = List.toArray xs
-    let choose f xs = List.choose f xs
-    let order eltOrder = List.order eltOrder 
-    let mapq f (x:FlatList<_>) = List.mapq f x
-    let mapFold f acc (x:FlatList<_>) =  List.mapFold f acc x
-    let foldMap f acc (x:FlatList<_>) =  List.foldMap f acc x
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Cancellable = 
 
-#endif
+    /// Run a cancellable computation using the given cancellation token
+    let run (ct: System.Threading.CancellationToken) (Cancellable oper) = 
+        if ct.IsCancellationRequested then 
+            ValueOrCancelled.Cancelled (OperationCanceledException()) 
+        else
+            oper ct 
 
-#if FLAT_LIST_AS_ARRAY
-//#else
-module FlatList =
-    let order eltOrder = Array.order eltOrder 
-    let mapq f x = Array.mapq f x
-    let mapFold f acc x =  Array.mapFold f acc x
-    let foldMap f acc x =  Array.foldMap f acc x
-#endif
+    /// Bind the result of a cancellable computation
+    let bind f comp1 = 
+       Cancellable (fun ct -> 
+            match run ct comp1 with 
+            | ValueOrCancelled.Value v1 -> run ct (f v1) 
+            | ValueOrCancelled.Cancelled err1 -> ValueOrCancelled.Cancelled err1)
 
+    /// Map the result of a cancellable computation
+    let map f oper = 
+       Cancellable (fun ct -> 
+           match run ct oper with 
+           | ValueOrCancelled.Value res -> ValueOrCancelled.Value (f res)
+           | ValueOrCancelled.Cancelled err -> ValueOrCancelled.Cancelled err)
+                    
+    /// Return a simple value as the result of a cancellable computation
+    let ret x = Cancellable (fun _ -> ValueOrCancelled.Value x)
 
+    /// Fold a cancellable computation along a sequence of inputs
+    let fold f acc seq = 
+        Cancellable (fun ct -> 
+           (ValueOrCancelled.Value acc, seq) 
+           ||> Seq.fold (fun acc x -> 
+               match acc with 
+               | ValueOrCancelled.Value accv -> run ct (f accv x)
+               | res -> res))
+    
+    /// Iterate a cancellable computation over a collection
+    let each f seq = 
+        Cancellable (fun ct -> 
+           (ValueOrCancelled.Value [], seq) 
+           ||> Seq.fold (fun acc x -> 
+               match acc with 
+               | ValueOrCancelled.Value acc -> 
+                   match run ct (f x) with 
+                   | ValueOrCancelled.Value x2 -> ValueOrCancelled.Value (x2 :: acc)
+                   | ValueOrCancelled.Cancelled err1 -> ValueOrCancelled.Cancelled err1
+               | canc -> canc)
+           |> function 
+               | ValueOrCancelled.Value acc -> ValueOrCancelled.Value (List.rev acc)
+               | canc -> canc)
+    
+    /// Delay a cancellable computation
+    let delay (f: unit -> Cancellable<'T>) = Cancellable (fun ct -> let (Cancellable g) = f() in g ct)
+
+    /// Run the computation in a mode where it may not be cancelled. The computation never results in a 
+    /// ValueOrCancelled.Cancelled.
+    let runWithoutCancellation comp = 
+        let res = run System.Threading.CancellationToken.None comp 
+        match res with 
+        | ValueOrCancelled.Cancelled _ -> failwith "unexpected cancellation" 
+        | ValueOrCancelled.Value r -> r
+
+    /// Bind the cancellation token associated with the computation
+    let token () = Cancellable (fun ct -> ValueOrCancelled.Value ct)
+
+    /// Represents a canceled computation
+    let canceled() = Cancellable (fun _ -> ValueOrCancelled.Cancelled (new OperationCanceledException()))
+
+    /// Catch exceptions in a computation
+    let private catch (Cancellable e) = 
+        Cancellable (fun ct -> 
+            try 
+                match e ct with 
+                | ValueOrCancelled.Value r -> ValueOrCancelled.Value (Choice1Of2 r) 
+                | ValueOrCancelled.Cancelled e -> ValueOrCancelled.Cancelled e 
+            with err -> 
+                ValueOrCancelled.Value (Choice2Of2 err))
+
+    /// Implement try/finally for a cancellable computation
+    let tryFinally e compensation =    
+        catch e |> bind (fun res ->  
+            compensation();
+            match res with Choice1Of2 r -> ret r | Choice2Of2 err -> raise err)
+
+    /// Implement try/with for a cancellable computation
+    let tryWith e handler =    
+        catch e |> bind (fun res ->  
+            match res with Choice1Of2 r -> ret r | Choice2Of2 err -> handler err)
+    
+    // /// Run the cancellable computation within an Async computation.  This isn't actaully used in the codebase, but left
+    // here in case we need it in the future 
+    //
+    // let toAsync e =    
+    //     async { 
+    //       let! ct = Async.CancellationToken
+    //       return! 
+    //          Async.FromContinuations(fun (cont, econt, ccont) -> 
+    //            // Run the computation synchronously using the given cancellation token
+    //            let res = try Choice1Of2 (run ct e) with err -> Choice2Of2 err
+    //            match res with 
+    //            | Choice1Of2 (ValueOrCancelled.Value v) -> cont v
+    //            | Choice1Of2 (ValueOrCancelled.Cancelled err) -> ccont err
+    //            | Choice2Of2 err -> econt err) 
+    //     }
+    
+type CancellableBuilder() = 
+    member x.Bind(e,k) = Cancellable.bind k e
+    member x.Return(v) = Cancellable.ret v
+    member x.ReturnFrom(v) = v
+    member x.Combine(e1,e2) = e1 |> Cancellable.bind (fun () -> e2)
+    member x.TryWith(e,handler) = Cancellable.tryWith e handler
+    member x.Using(resource,e) = Cancellable.tryFinally (e resource) (fun () -> (resource :> System.IDisposable).Dispose())
+    member x.TryFinally(e,compensation) =  Cancellable.tryFinally e compensation
+    member x.Delay(f) = Cancellable.delay f
+    member x.Zero() = Cancellable.ret ()
+
+let cancellable = CancellableBuilder()
 
 /// Computations that can cooperatively yield by returning a continuation
 ///
@@ -575,52 +662,72 @@ module FlatList =
 ///      captured by the NotYetDone closure. Computations do not need to be restartable.
 ///
 ///    - The key thing is that you can take an Eventually value and run it with 
-///      Eventually.repeatedlyProgressUntilDoneOrTimeShareOver
+///      Eventually.repeatedlyProgressUntilDoneOrTimeShareOverOrCanceled
+///
+///    - Cancellation results in a suspended computation rather than complete abandonment
 type Eventually<'T> = 
     | Done of 'T 
-    | NotYetDone of (unit -> Eventually<'T>)
+    | NotYetDone of (CompilationThreadToken -> Eventually<'T>)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Eventually = 
+    open System.Threading
+
     let rec box e = 
         match e with 
         | Done x -> Done (Operators.box x) 
-        | NotYetDone (work) -> NotYetDone (fun () -> box (work()))
+        | NotYetDone (work) -> NotYetDone (fun ctok -> box (work ctok))
 
-    let rec forceWhile check e  = 
+    let rec forceWhile ctok check e  = 
         match e with 
         | Done x -> Some(x)
         | NotYetDone (work) -> 
             if not(check()) 
             then None
-            else forceWhile check (work()) 
+            else forceWhile ctok check (work ctok) 
 
-    let force e = Option.get (forceWhile (fun () -> true) e)
+    let force ctok e = Option.get (forceWhile ctok (fun () -> true) e)
+
         
-    /// Keep running the computation bit by bit until a time limit is reached. 
+    /// Keep running the computation bit by bit until a time limit is reached.
     /// The runner gets called each time the computation is restarted
-    let repeatedlyProgressUntilDoneOrTimeShareOver timeShareInMilliseconds runner e = 
+    ///
+    /// If cancellation happens, the operation is left half-complete, ready to resume.
+    let repeatedlyProgressUntilDoneOrTimeShareOverOrCanceled timeShareInMilliseconds (ct: CancellationToken) runner e = 
         let sw = new System.Diagnostics.Stopwatch() 
-        let rec runTimeShare e = 
-          runner (fun () -> 
+        let rec runTimeShare ctok e = 
+          runner ctok (fun ctok -> 
             sw.Reset()
             sw.Start(); 
-            let rec loop(e) = 
-                match e with 
-                | Done _ -> e
-                | NotYetDone work -> 
-                    if sw.ElapsedMilliseconds > timeShareInMilliseconds then 
+            let rec loop ctok ev2 = 
+                match ev2 with 
+                | Done _ -> ev2
+                | NotYetDone work ->
+                    if ct.IsCancellationRequested || sw.ElapsedMilliseconds > timeShareInMilliseconds then 
                         sw.Stop();
-                        NotYetDone(fun () -> runTimeShare e) 
+                        NotYetDone(fun ctok -> runTimeShare ctok ev2) 
                     else 
-                        loop(work())
-            loop(e))
-        runTimeShare e
+                        loop ctok (work ctok)
+            loop ctok e)
+        NotYetDone (fun ctok -> runTimeShare ctok e)
+    
+    /// Keep running the asynchronous computation bit by bit. The runner gets called each time the computation is restarted.
+    /// Can be cancelled as an Async in the normal way.
+    let forceAsync (runner: (CompilationThreadToken -> Eventually<'T>) -> Async<Eventually<'T>>) (e: Eventually<'T>) : Async<'T option> =
+        let rec loop (e: Eventually<'T>) =
+            async {
+                match e with 
+                | Done x -> return Some x
+                | NotYetDone work ->
+                    let! r = runner work
+                    return! loop r
+            }
+        loop e
 
     let rec bind k e = 
         match e with 
         | Done x -> k x 
-        | NotYetDone work -> NotYetDone (fun () -> bind k (work()))
+        | NotYetDone work -> NotYetDone (fun ctok -> bind k (work ctok))
 
     let fold f acc seq = 
         (Done acc,seq) ||> Seq.fold  (fun acc x -> acc |> bind (fun acc -> f acc x))
@@ -629,13 +736,13 @@ module Eventually =
         match e with 
         | Done x -> Done(Result x)
         | NotYetDone work -> 
-            NotYetDone (fun () -> 
-                let res = try Result(work()) with | e -> Exception e 
+            NotYetDone (fun ctok -> 
+                let res = try Result(work ctok) with | e -> Exception e 
                 match res with 
                 | Result cont -> catch cont
                 | Exception e -> Done(Exception e))
     
-    let delay f = NotYetDone (fun () -> f())
+    let delay (f: unit -> Eventually<'T>) = NotYetDone (fun _ctok -> f())
 
     let tryFinally e compensation =    
         catch (e) 
@@ -647,6 +754,10 @@ module Eventually =
     let tryWith e handler =    
         catch e 
         |> bind (function Result v -> Done v | Exception e -> handler e)
+    
+    // All eventually computations carry a CompiationThreadToken
+    let token =    
+        NotYetDone (fun ctok -> Done ctok)
     
 type EventuallyBuilder() = 
     member x.Bind(e,k) = Eventually.bind k e
@@ -686,6 +797,7 @@ type UniqueStampGenerator<'T when 'T : equality>() =
             nItems <- nItems + 1
             idx
     member this.Encode(str)  = encode str
+    member this.Table = encodeTab.Keys
 
 //---------------------------------------------------------------------------
 // memoize tables (all entries cached, never collected)
@@ -735,8 +847,8 @@ type LazyWithContext<'T,'ctxt> =
           funcOrException = box f;
           findOriginalException = findOriginalException }
     static member NotLazy(x:'T) : LazyWithContext<'T,'ctxt> = 
-        { value = x;
-          funcOrException = null;
+        { value = x
+          funcOrException = null
           findOriginalException = id }
     member x.IsDelayed = (match x.funcOrException with null -> false | :? LazyWithContextFailure -> false | _ -> true)
     member x.IsForced = (match x.funcOrException with null -> true | _ -> false)
@@ -744,7 +856,7 @@ type LazyWithContext<'T,'ctxt> =
         match x.funcOrException with 
         | null -> x.value 
         | _ -> 
-            // Enter the lock in case another thread is in the process of evaluting the result
+            // Enter the lock in case another thread is in the process of evaluating the result
             System.Threading.Monitor.Enter(x);
             try 
                 x.UnsynchronizedForce(ctxt)
@@ -804,7 +916,7 @@ module NameMap =
     let exists f m = Map.foldBack (fun x y sofar -> sofar || f x y) m false
     let ofKeyedList f l = List.foldBack (fun x acc -> Map.add (f x) x acc) l Map.empty
     let ofList l : NameMap<'T> = Map.ofList l
-    let ofFlatList (l:FlatList<_>) : NameMap<'T> = FlatList.toMap l
+    let ofSeq l : NameMap<'T> = Map.ofSeq l
     let toList (l: NameMap<'T>) = Map.toList l
     let layer (m1 : NameMap<'T>) m2 = Map.foldBack Map.add m1 m2
 
@@ -837,10 +949,6 @@ module NameMap =
     let map f (l : NameMap<'T>) = Map.map (fun _ x -> f x) l
 
     let iter f (l : NameMap<'T>) = Map.iter (fun _k v -> f v) l
-
-    let iteri f (l : NameMap<'T>) = Map.iter f l
-
-    let mapi f (l : NameMap<'T>) = Map.map f l
 
     let partition f (l : NameMap<'T>) = Map.filter (fun _ x-> f x) l, Map.filter (fun _ x -> not (f x)) l
 
@@ -897,7 +1005,6 @@ type Map<'Key,'Value when 'Key : comparison> with
         | Some r -> res <- r; true
 
     member x.Values = [ for (KeyValue(_,v)) in x -> v ]
-    member x.Elements = [ for kvp in x -> kvp ]
     member x.AddAndMarkAsCollapsible (kvs: _[])   = (x,kvs) ||> Array.fold (fun x (KeyValue(k,v)) -> x.Add(k,v))
     member x.LinearTryModifyThenLaterFlatten (key, f: 'Value option -> 'Value) = x.Add (key, f (x.TryFind key))
     member x.MarkAsCollapsible ()  = x
@@ -912,33 +1019,30 @@ type LayeredMultiMap<'Key,'Value when 'Key : equality and 'Key : comparison>(con
         x.MarkAsCollapsible()
     member x.MarkAsCollapsible() = LayeredMultiMap(contents.MarkAsCollapsible())
     member x.TryFind k = contents.TryFind k
-    member x.Values = contents.Values |> Seq.concat
+    member x.Values = contents.Values |> List.concat
     static member Empty : LayeredMultiMap<'Key,'Value> = LayeredMultiMap LayeredMap.Empty
 
 [<AutoOpen>]
 module Shim =
 
     open System.IO
-    [<AbstractClass>]
-    type FileSystem() = 
-        abstract ReadAllBytesShim: fileName:string -> byte[] 
-        default this.ReadAllBytesShim (fileName:string) = 
-            use stream = this.FileStreamReadShim fileName
-            let len = stream.Length
-            let buf = Array.zeroCreate<byte> (int len)
-            stream.Read(buf, 0, (int len)) |> ignore                                            
-            buf
 
+#if FX_RESHAPED_REFLECTION
+    open PrimReflectionAdapters
+    open Microsoft.FSharp.Core.ReflectionAdapters
+#endif
+
+    type IFileSystem = 
+        abstract ReadAllBytesShim: fileName:string -> byte[] 
         abstract FileStreamReadShim: fileName:string -> System.IO.Stream
         abstract FileStreamCreateShim: fileName:string -> System.IO.Stream
-        abstract GetFullPathShim: fileName:string -> string
+        abstract FileStreamWriteExistingShim: fileName:string -> System.IO.Stream
         /// Take in a filename with an absolute path, and return the same filename
         /// but canonicalized with respect to extra path separators (e.g. C:\\\\foo.txt) 
         /// and '..' portions
-        abstract SafeGetFullPath: fileName:string -> string
+        abstract GetFullPathShim: fileName:string -> string
         abstract IsPathRootedShim: path:string -> bool
-
-        abstract IsInvalidFilename: filename:string -> bool
+        abstract IsInvalidPathShim: filename:string -> bool
         abstract GetTempPathShim : unit -> string
         abstract GetLastWriteTimeShim: fileName:string -> System.DateTime
         abstract SafeExists: fileName:string -> bool
@@ -946,37 +1050,45 @@ module Shim =
         abstract AssemblyLoadFrom: fileName:string -> System.Reflection.Assembly 
         abstract AssemblyLoad: assemblyName:System.Reflection.AssemblyName -> System.Reflection.Assembly 
 
-        default this.AssemblyLoadFrom(fileName:string) = 
-#if FX_ATLEAST_40_COMPILER_LOCATION
-            System.Reflection.Assembly.UnsafeLoadFrom fileName
-#else
-            System.Reflection.Assembly.LoadFrom fileName
-#endif
-        default this.AssemblyLoad(assemblyName:System.Reflection.AssemblyName) = System.Reflection.Assembly.Load assemblyName
 
+    type DefaultFileSystem() =
+        interface IFileSystem with
+            member __.AssemblyLoadFrom(fileName:string) = 
+                Assembly.LoadFrom fileName
+            member __.AssemblyLoad(assemblyName:System.Reflection.AssemblyName) = 
+                Assembly.Load assemblyName
 
-    let mutable FileSystem = 
-        { new FileSystem() with 
-            override __.ReadAllBytesShim (fileName:string) = File.ReadAllBytes fileName
+            member __.ReadAllBytesShim (fileName:string) = File.ReadAllBytes fileName
             member __.FileStreamReadShim (fileName:string) = new FileStream(fileName,FileMode.Open,FileAccess.Read,FileShare.ReadWrite)  :> Stream
             member __.FileStreamCreateShim (fileName:string) = new FileStream(fileName,FileMode.Create,FileAccess.Write,FileShare.Read ,0x1000,false) :> Stream
+            member __.FileStreamWriteExistingShim (fileName:string) = new FileStream(fileName,FileMode.Open,FileAccess.Write,FileShare.Read ,0x1000,false) :> Stream
             member __.GetFullPathShim (fileName:string) = System.IO.Path.GetFullPath fileName
-            member __.SafeGetFullPath (fileName:string) = 
-                //System.Diagnostics.Debug.Assert(Path.IsPathRooted(fileName), sprintf "SafeGetFullPath: '%s' is not absolute" fileName)
-                Path.GetFullPath fileName
 
             member __.IsPathRootedShim (path:string) = Path.IsPathRooted path
 
-            member __.IsInvalidFilename(filename:string) = 
-                String.IsNullOrEmpty(filename) || filename.IndexOfAny(Path.GetInvalidFileNameChars()) <> -1
+            member __.IsInvalidPathShim(path:string) = 
+                let isInvalidPath(p:string) = 
+                    String.IsNullOrEmpty(p) || p.IndexOfAny(System.IO.Path.GetInvalidPathChars()) <> -1
+
+                let isInvalidFilename(p:string) = 
+                    String.IsNullOrEmpty(p) || p.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) <> -1
+
+                let isInvalidDirectory(d:string) = 
+                    d=null || d.IndexOfAny(Path.GetInvalidPathChars()) <> -1
+
+                isInvalidPath (path) || 
+                let directory = Path.GetDirectoryName(path)
+                let filename = Path.GetFileName(path)
+                isInvalidDirectory(directory) || isInvalidFilename(filename)
 
             member __.GetTempPathShim() = System.IO.Path.GetTempPath()
 
             member __.GetLastWriteTimeShim (fileName:string) = File.GetLastWriteTime fileName
             member __.SafeExists (fileName:string) = System.IO.File.Exists fileName 
-            member __.FileDelete (fileName:string) = System.IO.File.Delete fileName }       
+            member __.FileDelete (fileName:string) = System.IO.File.Delete fileName
 
     type System.Text.Encoding with 
-        static member GetEncodingShim(n:int) =             
-                System.Text.Encoding.GetEncoding(n)           
+        static member GetEncodingShim(n:int) = 
+                System.Text.Encoding.GetEncoding(n)
 
+    let mutable FileSystem = DefaultFileSystem() :> IFileSystem 

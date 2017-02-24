@@ -1,6 +1,5 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
-#nowarn "44" // This construct is deprecated. please use Seq.item
 namespace FSharp.Core.Unittests.FSharp_Core.Microsoft_FSharp_Collections
 
 open System
@@ -64,17 +63,17 @@ type SeqModule2() =
         
     [<Test>]
     member this.Tl() =
-        // integer seq
-        let resultInt = Seq.tail <| seq { 1..10 }
-        VerifySeqsEqual (seq { 2..10 }) resultInt
+        // integer seq  
+        let resultInt = Seq.tail <| seq { 1..10 }        
+        Assert.AreEqual(Array.ofSeq (seq { 2..10 }), Array.ofSeq resultInt)
         
         // string seq
         let resultStr = Seq.tail <| seq { yield "a"; yield "b"; yield "c"; yield "d" }      
-        VerifySeqsEqual (seq { yield "b";  yield "c" ; yield "d" }) resultStr
+        Assert.AreEqual(Array.ofSeq (seq { yield "b";  yield "c" ; yield "d" }), Array.ofSeq resultStr)
         
         // 1-element seq
         let resultStr2 = Seq.tail <| seq { yield "a" }      
-        VerifySeqsEqual Seq.empty resultStr2
+        Assert.AreEqual(Array.ofSeq (Seq.empty : seq<string>), Array.ofSeq resultStr2)
 
         CheckThrowsArgumentNullException(fun () -> Seq.tail null |> ignore)
         CheckThrowsArgumentException(fun () -> Seq.tail Seq.empty |> Seq.iter (fun _ -> failwith "Should not be reached"))
@@ -574,8 +573,7 @@ type SeqModule2() =
     member this.SingletonCollectWithException () =
         this.MapWithExceptionTester (fun f-> Seq.collect (f >> Seq.singleton))
 
-#if FX_NO_LINQ
-#else     
+#if !FX_NO_LINQ
     [<Test>]
     member this.SystemLinqSelectWithSideEffects () =
         this.MapWithSideEffectsTester (fun f s -> System.Linq.Enumerable.Select(s, Func<_,_>(f))) false
@@ -697,8 +695,7 @@ type SeqModule2() =
         
         VerifySeqsEqual expectedint resultInt
 
-#if FX_NO_CHAR_PARSE
-#else        
+#if !FX_NO_CHAR_PARSE
         // string Seq
         let funcStr (y:string) = y+"ist"
        
@@ -896,35 +893,6 @@ type SeqModule2() =
         
         ()
 
-
-    [<Test>]
-    member this.Nth() =
-         
-        // Negative index
-        for i = -1 downto -10 do
-           CheckThrowsArgumentException (fun () -> Seq.nth i { 10 .. 20 } |> ignore)
-            
-        // Out of range
-        for i = 11 to 20 do
-           CheckThrowsArgumentException (fun () -> Seq.nth i { 10 .. 20 } |> ignore)
-         
-         // integer Seq
-        let resultInt = Seq.nth 3 { 10..20 } 
-        Assert.AreEqual(13, resultInt)
-        
-        // string Seq
-        let resultStr = Seq.nth 3 (seq ["Lists"; "Are";  "nthString" ; "List" ])
-        Assert.AreEqual("List",resultStr)
-          
-        // empty Seq
-        CheckThrowsArgumentException(fun () -> Seq.nth 0 (Seq.empty : seq<decimal>) |> ignore)
-       
-        // null Seq
-        let nullSeq:seq<'a> = null 
-        CheckThrowsArgumentNullException (fun () ->Seq.nth 3 nullSeq |> ignore)
-        
-        ()
-
     [<Test>]
     member this.Item() =
          // integer Seq
@@ -949,6 +917,20 @@ type SeqModule2() =
         // Out of range
         for i = 11 to 20 do
            CheckThrowsArgumentException (fun () -> Seq.item i { 10 .. 20 } |> ignore)
+
+    [<Test>]
+    member this.``item should fail with correct number of missing elements``() =
+        try
+            Seq.item 0 (Array.zeroCreate<int> 0) |> ignore
+            failwith "error expected"
+        with
+        | exn when exn.Message.Contains("seq was short by 1 element") -> ()
+
+        try
+            Seq.item 2 (Array.zeroCreate<int> 0) |> ignore
+            failwith "error expected"
+        with
+        | exn when exn.Message.Contains("seq was short by 3 elements") -> ()
 
     [<Test>]
     member this.Of_Array() =
@@ -1563,6 +1545,11 @@ type SeqModule2() =
         
         // null Seq
         CheckThrowsArgumentNullException(fun() -> Seq.truncate 1 null |> ignore)
+
+        // negative count
+        VerifySeqsEqual Seq.empty <| Seq.truncate -1 (seq [1;2;4;5;7])
+        VerifySeqsEqual Seq.empty <| Seq.truncate System.Int32.MinValue (seq [1;2;4;5;7])
+
         ()
         
     [<Test>]

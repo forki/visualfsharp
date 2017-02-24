@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 #nowarn "44" // This construct is deprecated. This function is for use by compiled F# code and should not be used directly
 namespace System.Numerics
@@ -19,7 +19,7 @@ namespace System.Numerics
     // NOTE: 0 has two repns (+1,0) or (-1,0).
     [<Struct>]
     [<CustomEquality; CustomComparison>]
-#if FX_ATLEAST_PORTABLE
+#if FX_PORTABLE_OR_NETSTANDARD
 #else
     [<StructuredFormatDisplay("{StructuredDisplayString}I")>]
 #endif
@@ -305,7 +305,7 @@ namespace System.Numerics
             | _ -> invalidArg "x" "signs should be +/- 1 or 0"
              
         static member Parse(text:string) =
-            if text = null then raise (new ArgumentNullException("text"))
+            if isNull text then raise (new ArgumentNullException("text"))
             let text = text.Trim()
             let len = text.Length 
             if len = 0 then raise (new System.FormatException(SR.GetString(SR.badFormatString)))
@@ -402,7 +402,7 @@ namespace Microsoft.FSharp.Core
                 if ok then 
                     res 
                 else 
-#if FSHARP_CORE_PORTABLE 
+#if FSCORE_PORTABLE_OLD 
                     // SL5 (and therefore Portable Profile47) does not have Parse, so make our own simple implementation
                     let parse(s : string) =
                         // ws* sign? digits+ ws*

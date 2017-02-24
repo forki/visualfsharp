@@ -1,10 +1,11 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Build
 
 open System
 open System.Text
 open System.Diagnostics.CodeAnalysis
+open System.IO
 open System.Reflection
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
@@ -17,7 +18,12 @@ open Internal.Utilities
 do()
 
 
-type FscCommandLineBuilder() =
+#if FX_RESHAPED_REFLECTION
+open Microsoft.FSharp.Core.ReflectionAdapters
+#endif
+
+type FscCommandLineBuilder () =
+
     // In addition to generating a command-line that will be handed to cmd.exe, we also generate
     // an array of individual arguments.  The former needs to be quoted (and cmd.exe will strip the
     // quotes while parsing), whereas the latter is not.  See bug 4357 for background; this helper
@@ -26,14 +32,11 @@ type FscCommandLineBuilder() =
     let builder = new CommandLineBuilder()
     let mutable args = []  // in reverse order
     let mutable srcs = []  // in reverse order
-    let mutable alreadyCalledWithFilenames = false
     /// Return a list of the arguments (with no quoting for the cmd.exe shell)
     member x.CapturedArguments() =
-        assert(not alreadyCalledWithFilenames)
         List.rev args
     /// Return a list of the sources (with no quoting for the cmd.exe shell)
     member x.CapturedFilenames() =
-        assert(alreadyCalledWithFilenames)
         List.rev srcs
     /// Return a full command line (with quoting for the cmd.exe shell)
     override x.ToString() =
@@ -48,7 +51,6 @@ type FscCommandLineBuilder() =
             let s = tmp.ToString()
             if s <> String.Empty then
                 srcs <- tmp.ToString() :: srcs
-        alreadyCalledWithFilenames <- true
 
     member x.AppendSwitchIfNotNull(switch:string, values:string array, sep:string) =
         builder.AppendSwitchIfNotNull(switch, values, sep)
@@ -100,6 +102,12 @@ type FscCommandLineBuilder() =
         builder.AppendSwitch(switch)
         args <- switch :: args
 
+    member internal x.GetCapturedArguments() = 
+        [|
+            yield! x.CapturedArguments()
+            yield! x.CapturedFilenames()
+        |]
+
 //There are a lot of flags on fsc.exe.
 //For now, not all of them are represented in the "Fsc class" object model.
 //The goal is to have the most common/important flags available via the Fsc class, and the
@@ -114,6 +122,8 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
     let mutable defineConstants : ITaskItem[] = [||]
     let mutable disabledWarnings : string = null
     let mutable documentationFile : string = null
+    let mutable embedAllSources = false
+    let mutable embed : string = null
     let mutable generateInterfaceFile : string = null
     let mutable keyFile : string = null
     let mutable noFramework = false
@@ -128,35 +138,190 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
     let mutable referencePath : string = null
     let mutable resources : ITaskItem[] = [||]
     let mutable sources : ITaskItem[] = [||]
+    let mutable sourceLink : string = null
     let mutable targetType : string = null 
-#if FX_ATLEAST_35   
-#else 
     let mutable toolExe : string = "fsc.exe"
-#endif    
     let mutable warningLevel : string = null
     let mutable treatWarningsAsErrors : bool = false
     let mutable warningsAsErrors : string = null
     let mutable toolPath : string = 
-        match FSharpEnvironment.BinFolderOfDefaultFSharpCompiler with
+        let locationOfThisDll = 
+            try Some(System.IO.Path.GetDirectoryName(typeof<FscCommandLineBuilder>.Assembly.Location))
+            with _ -> None
+        match FSharpEnvironment.BinFolderOfDefaultFSharpCompiler(locationOfThisDll) with
         | Some s -> s
         | None -> ""
     let mutable versionFile : string = null
     let mutable win32res : string = null
     let mutable win32manifest : string = null
     let mutable vserrors : bool = false
-    let mutable validateTypeProviders : bool = false
     let mutable vslcid : string = null
     let mutable utf8output : bool = false
     let mutable subsystemVersion : string = null
     let mutable highEntropyVA : bool = false
     let mutable targetProfile : string = null
-    let mutable sqmSessionGuid : string = null
+    let mutable dotnetFscCompilerPath : string = null
 
     let mutable capturedArguments : string list = []  // list of individual args, to pass to HostObject Compile()
     let mutable capturedFilenames : string list = []  // list of individual source filenames, to pass to HostObject Compile()
 
-    do
-        this.YieldDuringToolExecution <- true  // See bug 6483; this makes parallel build faster, and is fine to set unconditionally
+#if ENABLE_MONO_SUPPORT
+    // The property YieldDuringToolExecution is not available on Mono.
+    // So we only set it if available (to avoid a compile-time dependency). 
+    let runningOnMono = try System.Type.GetType("Mono.Runtime") <> null with e-> false         
+    do if not runningOnMono then  
+        typeof<ToolTask>.InvokeMember("YieldDuringToolExecution",(BindingFlags.Instance ||| BindingFlags.SetProperty ||| BindingFlags.Public),null,this,[| box true |])  |> ignore 
+#else
+    do this.YieldDuringToolExecution <- true  // See bug 6483; this makes parallel build faster, and is fine to set unconditionally
+#endif
+
+    let generateCommandLineBuilder () =
+        let builder = new FscCommandLineBuilder()
+        // OutputAssembly
+        builder.AppendSwitchIfNotNull("-o:", outputAssembly)
+        // CodePage
+        builder.AppendSwitchIfNotNull("--codepage:", codePage)
+        // Debug
+        if debugSymbols then
+            builder.AppendSwitch("-g")
+        // DebugType
+        builder.AppendSwitchIfNotNull("--debug:", 
+            if debugType = null then null else
+                match debugType.ToUpperInvariant() with
+                | "NONE"     -> null
+                | "PORTABLE" -> "portable"
+                | "PDBONLY"  -> "pdbonly"
+                | "EMBEDDED" -> "embedded"
+                | "FULL"     -> "full"
+                | _          -> null)
+        if embedAllSources then
+            builder.AppendSwitch("--embed+")
+        builder.AppendSwitchIfNotNull("--embed:", embed)
+        builder.AppendSwitchIfNotNull("--sourcelink:", sourceLink)
+        // NoFramework
+        if noFramework then 
+            builder.AppendSwitch("--noframework") 
+        // BaseAddress
+        builder.AppendSwitchIfNotNull("--baseaddress:", baseAddress)
+        // DefineConstants
+        if defineConstants <> null then 
+            for item in defineConstants do
+                builder.AppendSwitchIfNotNull("--define:", item.ItemSpec)          
+        // DocumentationFile
+        builder.AppendSwitchIfNotNull("--doc:", documentationFile)
+        // GenerateInterfaceFile
+        builder.AppendSwitchIfNotNull("--sig:", generateInterfaceFile)
+        // KeyFile
+        builder.AppendSwitchIfNotNull("--keyfile:", keyFile)
+        // Optimize
+        if optimize then
+            builder.AppendSwitch("--optimize+")
+        else
+            builder.AppendSwitch("--optimize-")
+        if not tailcalls then
+            builder.AppendSwitch("--tailcalls-")
+        // PdbFile
+        builder.AppendSwitchIfNotNull("--pdb:", pdbFile)
+        // Platform
+        builder.AppendSwitchIfNotNull("--platform:", 
+            let ToUpperInvariant (s:string) = if s = null then null else s.ToUpperInvariant()
+            match ToUpperInvariant(platform), prefer32bit, ToUpperInvariant(targetType) with
+                | "ANYCPU", true, "EXE"
+                | "ANYCPU", true, "WINEXE" -> "anycpu32bitpreferred"
+                | "ANYCPU",  _, _  -> "anycpu"
+                | "X86"   ,  _, _  -> "x86"
+                | "X64"   ,  _, _  -> "x64"
+                | "ITANIUM", _, _  -> "Itanium"
+                | _         -> null)
+        // Resources
+        if resources <> null then 
+            for item in resources do
+                builder.AppendSwitchIfNotNull("--resource:", item.ItemSpec)
+        // VersionFile
+        builder.AppendSwitchIfNotNull("--versionfile:", versionFile)
+        // References
+        if references <> null then 
+            for item in references do
+                builder.AppendSwitchIfNotNull("-r:", item.ItemSpec)
+        // ReferencePath
+        let referencePathArray = // create a array of strings
+            match referencePath with
+            | null -> null
+            | _ -> referencePath.Split([|';'; ','|], StringSplitOptions.RemoveEmptyEntries)
+                  
+        builder.AppendSwitchIfNotNull("--lib:", referencePathArray, ",")   
+        // TargetType
+        builder.AppendSwitchIfNotNull("--target:", 
+            if targetType = null then null else
+                match targetType.ToUpperInvariant() with
+                | "LIBRARY" -> "library"
+                | "EXE" -> "exe"
+                | "WINEXE" -> "winexe" 
+                | "MODULE" -> "module"
+                | _ -> null)
+        
+        // NoWarn
+        match disabledWarnings with
+        | null -> ()
+        | _ -> builder.AppendSwitchIfNotNull("--nowarn:", disabledWarnings.Split([|' '; ';'; ','; '\r'; '\n'|], StringSplitOptions.RemoveEmptyEntries), ",")
+        
+        // WarningLevel
+        builder.AppendSwitchIfNotNull("--warn:", warningLevel)
+
+        // TreatWarningsAsErrors
+        if treatWarningsAsErrors then
+            builder.AppendSwitch("--warnaserror")
+
+        // WarningsAsErrors
+        // Change warning 76, HashReferenceNotAllowedInNonScript/HashDirectiveNotAllowedInNonScript/HashIncludeNotAllowedInNonScript, into an error
+        // REVIEW: why is this logic here? In any case these are errors already by default!
+        let warningsAsErrorsArray =
+            match warningsAsErrors with
+            | null -> [|"76"|]
+            | _ -> (warningsAsErrors + " 76 ").Split([|' '; ';'; ','|], StringSplitOptions.RemoveEmptyEntries)                        
+
+        builder.AppendSwitchIfNotNull("--warnaserror:", warningsAsErrorsArray, ",")            
+
+        // Win32ResourceFile
+        builder.AppendSwitchIfNotNull("--win32res:", win32res)
+
+        // Win32ManifestFile
+        builder.AppendSwitchIfNotNull("--win32manifest:", win32manifest)
+
+        // VisualStudioStyleErrors 
+        if vserrors then
+            builder.AppendSwitch("--vserrors")      
+
+        builder.AppendSwitchIfNotNull("--LCID:", vslcid)
+        if utf8output then
+            builder.AppendSwitch("--utf8output")
+            
+        // When building using the fsc task, always emit the "fullpaths" flag to make the output easier
+        // for the user to parse
+        builder.AppendSwitch("--fullpaths")
+
+        // When building using the fsc task, also emit "flaterrors" to ensure that multi-line error messages
+        // aren't trimmed
+        builder.AppendSwitch("--flaterrors")
+
+        builder.AppendSwitchIfNotNull("--subsystemversion:", subsystemVersion)
+        if highEntropyVA then
+            builder.AppendSwitch("--highentropyva+")
+        else
+            builder.AppendSwitch("--highentropyva-")
+
+        builder.AppendSwitchIfNotNull("--targetprofile:", targetProfile)
+
+        // OtherFlags - must be second-to-last
+        builder.AppendSwitchUnquotedIfNotNull("", otherFlags)
+        capturedArguments <- builder.CapturedArguments()
+
+        // Sources - these have to go last
+        builder.AppendFileNamesIfNotNull(sources, " ")
+        capturedFilenames <- builder.CapturedFilenames()
+
+        builder
+
     // --baseaddress
     member fsc.BaseAddress
         with get() = baseAddress 
@@ -169,7 +334,7 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
     member fsc.DebugSymbols
         with get() = debugSymbols
         and set(b) = debugSymbols <- b
-    // --debug <none/pdbonly/full>: Emit debugging information
+    // --debug <none/portable/embedded/pdbonly/full>: Emit debugging information
     member fsc.DebugType
         with get() = debugType
         and set(s) = debugType <- s
@@ -185,6 +350,12 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
     member fsc.DocumentationFile
         with get() = documentationFile
         and set(s) = documentationFile <- s
+    member fsc.EmbedAllSources
+        with get() = embedAllSources
+        and  set(s) = embedAllSources <- s
+    member fsc.Embed
+        with get() = embed
+        and set(e) = embed <- e
     // --generate-interface-file <string>: 
     //     Print the inferred interface of the
     //     assembly to a file.
@@ -251,6 +422,10 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
     member fsc.Resources
         with get() = resources
         and set(a) = resources <- a
+    // SourceLink
+    member fsc.SourceLink  
+        with get() = sourceLink 
+        and set(s) = sourceLink <- s
     // source files 
     member fsc.Sources  
         with get() = sources 
@@ -268,14 +443,6 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
     member fsc.VersionFile
         with get() = versionFile
         and set(s) = versionFile <- s
-
-#if FX_ATLEAST_35
-#else
-    // Allow overriding to the executable name "fsc.exe"
-    member fsc.ToolExe
-        with get() = toolExe
-        and set(s) = toolExe<- s
-#endif
 
     // For targeting other folders for "fsc.exe" (or ToolExe if different)
     member fsc.ToolPath
@@ -309,10 +476,6 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
         with get() = vserrors
         and set(p) = vserrors <- p
 
-    member fsc.ValidateTypeProviders
-        with get() = validateTypeProviders
-        and set(p) = validateTypeProviders <- p
-
     member fsc.LCID
         with get() = vslcid
         and set(p) = vslcid <- p
@@ -333,37 +496,40 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
         with get() = targetProfile
         and set(p) = targetProfile <- p
 
-    member fsc.SqmSessionGuid
-        with get() = sqmSessionGuid
-        and set(p) = sqmSessionGuid <- p
-        
+    member fsc.DotnetFscCompilerPath  
+        with get() = dotnetFscCompilerPath
+        and set(p) = dotnetFscCompilerPath <- p
+
     // ToolTask methods
     override fsc.ToolName = "fsc.exe" 
     override fsc.StandardErrorEncoding = if utf8output then System.Text.Encoding.UTF8 else base.StandardErrorEncoding
     override fsc.StandardOutputEncoding = if utf8output then System.Text.Encoding.UTF8 else base.StandardOutputEncoding
     override fsc.GenerateFullPathToTool() = 
-        if toolPath = "" then
-            raise (new System.InvalidOperationException(FSBuild.SR.toolpathUnknown()))
+        if toolPath = "" then raise (new System.InvalidOperationException(FSBuild.SR.toolpathUnknown()))
         System.IO.Path.Combine(toolPath, fsc.ToolExe)
-    member internal fsc.InternalGenerateFullPathToTool() = fsc.GenerateFullPathToTool()  // expose for unit testing
-    member internal fsc.BaseExecuteTool(pathToTool, responseFileCommands, commandLineCommands) =  // F# does not allow protected members to be captured by lambdas, this is the standard workaround
+    member internal fsc.InternalGenerateFullPathToTool() = fsc.GenerateFullPathToTool()             // expose for unit testing
+    member internal fsc.BaseExecuteTool(pathToTool, responseFileCommands, commandLineCommands) =    // F# does not allow protected members to be captured by lambdas, this is the standard workaround
         base.ExecuteTool(pathToTool, responseFileCommands, commandLineCommands)
+
     /// Intercept the call to ExecuteTool to handle the host compile case.
     override fsc.ExecuteTool(pathToTool, responseFileCommands, commandLineCommands) =
         let host = box fsc.HostObject
         match host with
-        | null ->
-            base.ExecuteTool(pathToTool, responseFileCommands, commandLineCommands)
+        | null -> base.ExecuteTool(pathToTool, responseFileCommands, commandLineCommands)
         | _ ->
             let sources = sources|>Array.map(fun i->i.ItemSpec)
+#if FX_NO_CONVERTER
+            let baseCallDelegate = new Func<int>(fun () -> fsc.BaseExecuteTool(pathToTool, responseFileCommands, commandLineCommands) )
+#else
             let baseCall = fun (dummy : int) -> fsc.BaseExecuteTool(pathToTool, responseFileCommands, commandLineCommands)
             // We are using a Converter<int,int> rather than a "unit->int" because it is too hard to
             // figure out how to pass an F# function object via reflection.  
             let baseCallDelegate = new System.Converter<int,int>(baseCall)
+#endif
             try 
                 let ret = 
                     (host.GetType()).InvokeMember("Compile", BindingFlags.Public ||| BindingFlags.NonPublic ||| BindingFlags.InvokeMethod ||| BindingFlags.Instance, null, host, 
-                                                [| box baseCallDelegate; box (capturedArguments |> List.toArray); box (capturedFilenames |> List.toArray) |],
+                                                [| baseCallDelegate; box (capturedArguments |> List.toArray); box (capturedFilenames |> List.toArray) |],
                                                 System.Globalization.CultureInfo.InvariantCulture)
                 unbox ret
             with 
@@ -373,158 +539,27 @@ type [<Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1704:Iden
             | e ->
                 System.Diagnostics.Debug.Assert(false, "HostObject received by Fsc task did not have a Compile method or the compile method threw an exception. "+(e.ToString()))
                 reraise()
-           
+
     override fsc.GenerateCommandLineCommands() =
         let builder = new FscCommandLineBuilder()
-        
-        // OutputAssembly
-        builder.AppendSwitchIfNotNull("-o:", outputAssembly)
-        // CodePage
-        builder.AppendSwitchIfNotNull("--codepage:", codePage)
-        // Debug
-        if debugSymbols then
-            builder.AppendSwitch("-g")
-        // DebugType
-        builder.AppendSwitchIfNotNull("--debug:", 
-            if debugType = null then null else
-                match debugType.ToUpperInvariant() with
-                | "NONE"     -> null
-                | "PDBONLY"  -> "pdbonly"
-                | "FULL"     -> "full"
-                | _         -> null)
-        // NoFramework
-        if noFramework then 
-            builder.AppendSwitch("--noframework") 
-        // BaseAddress
-        builder.AppendSwitchIfNotNull("--baseaddress:", baseAddress)
-        // DefineConstants
-        for item in defineConstants do
-            builder.AppendSwitchIfNotNull("--define:", item.ItemSpec)          
-        // DocumentationFile
-        builder.AppendSwitchIfNotNull("--doc:", documentationFile)
-        // GenerateInterfaceFile
-        builder.AppendSwitchIfNotNull("--sig:", generateInterfaceFile)
-        // KeyFile
-        builder.AppendSwitchIfNotNull("--keyfile:", keyFile)
-        // Optimize
-        if optimize then
-            builder.AppendSwitch("--optimize+")
-        else
-            builder.AppendSwitch("--optimize-")
-        if not tailcalls then
-            builder.AppendSwitch("--tailcalls-")
-        // PdbFile
-        builder.AppendSwitchIfNotNull("--pdb:", pdbFile)
-        // Platform
-        builder.AppendSwitchIfNotNull("--platform:", 
-            let ToUpperInvariant (s:string) = if s = null then null else s.ToUpperInvariant()
-            match ToUpperInvariant(platform), prefer32bit, ToUpperInvariant(targetType) with
-                | "ANYCPU", true, "EXE"
-                | "ANYCPU", true, "WINEXE" -> "anycpu32bitpreferred"
-                | "ANYCPU",  _, _  -> "anycpu"
-                | "X86"   ,  _, _  -> "x86"
-                | "X64"   ,  _, _  -> "x64"
-                | "ITANIUM", _, _  -> "Itanium"
-                | _         -> null)
-        // Resources
-        for item in resources do
-            builder.AppendSwitchIfNotNull("--resource:", item.ItemSpec)
-        // VersionFile
-        builder.AppendSwitchIfNotNull("--versionfile:", versionFile)
-        // References
-        for item in references do
-            builder.AppendSwitchIfNotNull("-r:", item.ItemSpec)
-        // ReferencePath
-        let referencePathArray = // create a array of strings
-            match referencePath with
-            | null -> null
-            | _ -> referencePath.Split([|';'; ','|], StringSplitOptions.RemoveEmptyEntries)
-                  
-        builder.AppendSwitchIfNotNull("--lib:", referencePathArray, ",")   
-        // TargetType
-        builder.AppendSwitchIfNotNull("--target:", 
-            if targetType = null then null else
-                match targetType.ToUpperInvariant() with
-                | "LIBRARY" -> "library"
-                | "EXE" -> "exe"
-                | "WINEXE" -> "winexe" 
-                | "MODULE" -> "module"
-                | _ -> null)
-        
-        // NoWarn
-        match disabledWarnings with
-        | null -> ()
-        | _ -> builder.AppendSwitchIfNotNull("--nowarn:", disabledWarnings.Split([|' '; ';'; ','; '\r'; '\n'|], StringSplitOptions.RemoveEmptyEntries), ",")
-        
-        // WarningLevel
-        builder.AppendSwitchIfNotNull("--warn:", warningLevel)
-        
-        // TreatWarningsAsErrors
-        if treatWarningsAsErrors then
-            builder.AppendSwitch("--warnaserror")
-            
-        // WarningsAsErrors
-        // Change warning 76, HashReferenceNotAllowedInNonScript/HashDirectiveNotAllowedInNonScript/HashIncludeNotAllowedInNonScript, into an error
-        // REVIEW: why is this logic here? In any case these are errors already by default!
-        let warningsAsErrorsArray =
-            match warningsAsErrors with
-            | null -> [|"76"|]
-            | _ -> (warningsAsErrors + " 76 ").Split([|' '; ';'; ','|], StringSplitOptions.RemoveEmptyEntries)                        
+        if not (String.IsNullOrEmpty(dotnetFscCompilerPath)) then builder.AppendSwitch(dotnetFscCompilerPath)
+        builder.ToString()
 
-        builder.AppendSwitchIfNotNull("--warnaserror:", warningsAsErrorsArray, ",")            
-     
-            
-        // Win32ResourceFile
-        builder.AppendSwitchIfNotNull("--win32res:", win32res)
-        
-        // Win32ManifestFile
-        builder.AppendSwitchIfNotNull("--win32manifest:", win32manifest)
-        
-        // VisualStudioStyleErrors 
-        if vserrors then
-            builder.AppendSwitch("--vserrors")      
+    override fsc.GenerateResponseFileCommands() =
+        let builder = generateCommandLineBuilder ()
+        builder.GetCapturedArguments() |> Seq.fold(fun acc f -> acc + f + Environment.NewLine) ""
 
-        // ValidateTypeProviders 
-        if validateTypeProviders then
-            builder.AppendSwitch("--validate-type-providers")           
-
-        builder.AppendSwitchIfNotNull("--LCID:", vslcid)
-        
-        if utf8output then
-            builder.AppendSwitch("--utf8output")
-            
-        // When building using the fsc task, always emit the "fullpaths" flag to make the output easier
-        // for the user to parse
-        builder.AppendSwitch("--fullpaths")
-        
-        // When building using the fsc task, also emit "flaterrors" to ensure that multi-line error messages
-        // aren't trimmed
-        builder.AppendSwitch("--flaterrors")
-
-        builder.AppendSwitchIfNotNull("--subsystemversion:", subsystemVersion)
-        if highEntropyVA then
-            builder.AppendSwitch("--highentropyva+")
-        else
-            builder.AppendSwitch("--highentropyva-")
-
-        builder.AppendSwitchIfNotNull("--sqmsessionguid:", sqmSessionGuid)
-
-        builder.AppendSwitchIfNotNull("--targetprofile:", targetProfile)
-
-        // OtherFlags - must be second-to-last
-        builder.AppendSwitchUnquotedIfNotNull("", otherFlags)
-        capturedArguments <- builder.CapturedArguments()
-        
-        // Sources - these have to go last
-        builder.AppendFileNamesIfNotNull(sources, " ")
-        capturedFilenames <- builder.CapturedFilenames()
-        let s = builder.ToString()
-        s
     // expose this to internal components (for nunit testing)
     member internal fsc.InternalGenerateCommandLineCommands() =
         fsc.GenerateCommandLineCommands()
+
+    // expose this to internal components (for nunit testing)
+    member internal fsc.InternalGenerateResponseFileCommands() = 
+        fsc.GenerateResponseFileCommands()
+
     member internal fsc.InternalExecuteTool(pathToTool, responseFileCommands, commandLineCommands) =
         fsc.ExecuteTool(pathToTool, responseFileCommands, commandLineCommands)
+
     member internal fsc.GetCapturedArguments() = 
         [|
             yield! capturedArguments

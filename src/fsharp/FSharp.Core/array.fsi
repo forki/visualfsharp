@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Collections
 
@@ -11,6 +11,14 @@ namespace Microsoft.FSharp.Collections
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     [<RequireQualifiedAccess>]
     module Array = 
+
+        /// <summary>Builds a new array that contains the cartesian product of the two input arrays.</summary>
+        /// <param name="array1">The first input array.</param>
+        /// <param name="array2">The second input array.</param>
+        /// <exception cref="System.ArgumentNullException">Thrown when either of the input arrays is null.</exception>
+        /// <returns>The resulting array of pairs.</returns>
+        [<CompiledName("AllPairs")>]
+        val allPairs: array1:'T1[] -> array2:'T2[] -> ('T1 * 'T2)[]
 
         /// <summary>Builds a new array that contains the elements of the first array followed by the elements of the second array.</summary>
         /// <param name="array1">The first input array.</param>
@@ -54,7 +62,7 @@ namespace Microsoft.FSharp.Collections
         /// <exception cref="System.ArgumentException">Thrown when any of sourceIndex, targetIndex or count are negative,
         /// or when there aren't enough elements in source or target.</exception>
         [<CompiledName("CopyTo")>]
-        val blit: source:'T[] -> sourceIndex:int -> target:'T[] -> targetIndex:int -> count:int -> unit
+        val inline blit: source:'T[] -> sourceIndex:int -> target:'T[] -> targetIndex:int -> count:int -> unit
         
         /// <summary>For each element of the array, applies the given function. Concatenates all the results and return the combined array.</summary>
         /// <param name="mapping">The function to create sub-arrays from the input array elements.</param>
@@ -64,17 +72,18 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Collect")>]
         val collect : mapping:('T -> 'U[]) -> array:'T[] -> 'U[]
 
-        /// <summary>Compares two arrays using the given comparison function, element by element.
-        /// Returns the first non-zero result from the comparison function.  If the end of an array
-        /// is reached it returns a -1 if the first array is shorter and a 1 if the second array
-        /// is shorter.</summary>
+        /// <summary>Compares two arrays using the given comparison function, element by element.</summary>
         ///
         /// <param name="comparer">A function that takes an element from each array and returns an int.
         /// If it evaluates to a non-zero value iteration is stopped and that value is returned.</param>
         /// <param name="array1">The first input array.</param>
         /// <param name="array2">The second input array.</param>
         ///
-        /// <returns>The first non-zero value from the comparison function.</returns>
+        /// <returns>Returns the first non-zero result from the comparison function. If the first array has 
+        /// a larger element, the return value is always positive. If the second array has a larger 
+        /// element, the return value is always negative. When the elements are equal in the two 
+        /// arrays, 1 is returned if the first array is longer, 0 is returned if they are equal in 
+        /// length, and -1 is returned when the second array is longer.</returns>
         ///
         /// <exception cref="System.ArgumentNullException">Thrown when either of the input arrays
         /// is null.</exception>
@@ -174,6 +183,15 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Choose")>]
         val choose: chooser:('T -> 'U option) -> array:'T[] -> 'U[]
 
+        /// <summary>Divides the input array into chunks of size at most <c>chunkSize</c>.</summary>
+        /// <param name="chunkSize">The maximum size of each chunk.</param>
+        /// <param name="array">The input array.</param>
+        /// <returns>The array divided into chunks.</returns>
+        /// <exception cref="System.ArgumentNullException">Thrown when the input array is null.</exception>
+        /// <exception cref="System.ArgumentException">Thrown when <c>chunkSize</c> is not positive.</exception>
+        [<CompiledName("ChunkBySize")>]
+        val chunkBySize: chunkSize:int -> array:'T[] -> 'T[][]
+
         /// <summary>Returns an array that contains no duplicate entries according to generic hash and
         /// equality comparisons on the entries.
         /// If an element occurs multiple times in the array then the later occurrences are discarded.</summary>
@@ -199,6 +217,15 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("DistinctBy")>]
         val distinctBy: projection:('T -> 'Key) -> array:'T[] -> 'T[] when 'Key : equality
 
+        /// <summary>Splits the input array into at most <c>count</c> chunks.</summary>
+        /// <param name="count">The maximum number of chunks.</param>
+        /// <param name="array">The input array.</param>
+        /// <returns>The array split into chunks.</returns>
+        /// <exception cref="System.ArgumentNullException">Thrown when the input array is null.</exception>
+        /// <exception cref="System.ArgumentException">Thrown when <c>count</c> is not positive.</exception>
+        [<CompiledName("SplitInto")>]
+        val splitInto: count:int -> array:'T[] -> 'T[][]
+
         /// <summary>Returns an empty array of the given type.</summary>
         /// <returns>The empty array.</returns>
         [<GeneralizableValue>]
@@ -215,6 +242,19 @@ namespace Microsoft.FSharp.Collections
         /// <exception cref="System.ArgumentException">Thrown when the input does not have precisely one element.</exception>
         [<CompiledName("ExactlyOne")>]
         val exactlyOne: array:'T[] -> 'T
+
+        /// <summary>Returns a new list with the distinct elements of the input array which do not appear in the itemsToExclude sequence,
+        /// using generic hash and equality comparisons to compare values.</summary>
+        ///
+        /// <param name="itemsToExclude">A sequence whose elements that also occur in the input array will cause those elements to be
+        /// removed from the result.</param>
+        /// <param name="array">An array whose elements that are not also in itemsToExclude will be returned.</param>
+        ///
+        /// <returns>An array that contains the distinct elements of <c>array</c> that do not appear in <c>itemsToExclude</c>.</returns>
+        ///
+        /// <exception cref="System.ArgumentNullException">Thrown when either itemsToExclude or array is null.</exception>
+        [<CompiledName("Except")>]
+        val except: itemsToExclude:seq<'T> -> array:'T[] -> 'T[] when 'T : equality
 
         /// <summary>Tests if any element of the array satisfies the given predicate.</summary>
         ///
@@ -685,7 +725,7 @@ namespace Microsoft.FSharp.Collections
         /// <param name="array">The input array.</param>
         /// <exception cref="System.ArgumentNullException">Thrown when the input array is null.</exception>
         /// <exception cref="System.ArgumentException">Thrown when the input array is empty.</exception>
-        /// <returns>The final result of the redcutions.</returns>
+        /// <returns>The final result of the reductions.</returns>
         [<CompiledName("Reduce")>]
         val reduce: reduction:('T -> 'T -> 'T) -> array:'T[] -> 'T
 
@@ -761,7 +801,7 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Skip")>]
         val skip: count:int -> array:'T[] -> 'T[]
 
-        /// <summary>Bypasses elements in an array while the given predicate returns <c>true</c>, and then returns
+        /// <summary>Bypasses elements in an array while the given predicate returns True, and then returns
         /// the remaining elements in a new array.</summary>
         /// <param name="predicate">A function that evaluates an element of the array to a boolean value.</param>
         /// <param name="source">The input array.</param>
@@ -911,7 +951,7 @@ namespace Microsoft.FSharp.Collections
         val take: count:int -> array:'T[] -> 'T[]
 
         /// <summary>Returns an array that contains all elements of the original array while the 
-        /// given predicate returns <c>true</c>, and then returns no further elements.</summary>
+        /// given predicate returns True, and then returns no further elements.</summary>
         ///
         /// <param name="predicate">A function that evaluates to false when no more items should be returned.</param>
         /// <param name="array">The input array.</param>
@@ -950,12 +990,11 @@ namespace Microsoft.FSharp.Collections
         /// <param name="array">The input array.</param>
         /// <returns>The result array.</returns>
         /// <exception cref="System.ArgumentNullException">Thrown when the input array is null.</exception>
-        /// <exception cref="System.ArgumentException">Thrown when the count is negative.</exception>
         [<CompiledName("Truncate")>]
         val truncate: count:int -> array:'T[] -> 'T[]
 
-        /// <summary>Returns the first element for which the given function returns <c>true</c>.
-        /// Return <c>None</c> if no such element exists.</summary>
+        /// <summary>Returns the first element for which the given function returns True.
+        /// Return None if no such element exists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="array">The input array.</param>
         /// <returns>The first element that satisfies the predicate, or None.</returns>
@@ -963,8 +1002,8 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("TryFind")>]
         val tryFind: predicate:('T -> bool) -> array:'T[] -> 'T option
 
-        /// <summary>Returns the last element for which the given function returns <c>true</c>.
-        /// Return <c>None</c> if no such element exists.</summary>
+        /// <summary>Returns the last element for which the given function returns True.
+        /// Return None if no such element exists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="array">The input array.</param>
         /// <exception cref="System.ArgumentNullException">Thrown when the input array is null.</exception>
@@ -1063,8 +1102,7 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Zip3")>]
         val zip3: array1:'T1[] -> array2:'T2[] -> array3:'T3[] -> ('T1 * 'T2 * 'T3)[]
 
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
         /// <summary>Provides parallel operations on arrays </summary>
         module Parallel =
 
@@ -1141,7 +1179,7 @@ namespace Microsoft.FSharp.Collections
             /// <summary>Create an array given the dimension and a generator function to compute the elements.</summary>
             ///
             /// <remarks>Performs the operation in parallel using System.Threading.Parallel.For.
-            /// The order in which the given function is applied to indicies is not specified.</remarks>
+            /// The order in which the given function is applied to indices is not specified.</remarks>
             /// <param name="count"></param>
             /// <param name="initializer"></param>
             /// <returns>'T[]</returns>
@@ -1153,7 +1191,7 @@ namespace Microsoft.FSharp.Collections
             /// respectively </summary>
             ///
             /// <remarks>Performs the operation in parallel using System.Threading.Parallel.For.
-            /// The order in which the given function is applied to indicies is not specified.</remarks>
+            /// The order in which the given function is applied to indices is not specified.</remarks>
             /// <param name="predicate">The function to test the input elements.</param>
             /// <param name="array">The input array.</param>
             /// <returns>'T[] * 'T[]</returns>

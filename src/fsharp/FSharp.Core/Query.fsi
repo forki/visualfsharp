@@ -1,8 +1,6 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Linq
-
-#if QUERIES_IN_FSLIB
 
     open Microsoft.FSharp
     open Microsoft.FSharp.Core
@@ -372,5 +370,4 @@ namespace Microsoft.FSharp.Linq.QueryRunExtensions
 
 
 
-#endif
 

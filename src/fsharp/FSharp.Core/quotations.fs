@@ -1,9 +1,8 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Quotations
 
-#if FX_MINIMAL_REFLECTION
-#else
+#if !FX_MINIMAL_REFLECTION
 open System
 open System.IO
 open System.Reflection
@@ -18,13 +17,13 @@ open Microsoft.FSharp.Reflection
 open Microsoft.FSharp.Core.Printf
 open Microsoft.FSharp.Text.StructuredPrintfImpl
 open Microsoft.FSharp.Text.StructuredPrintfImpl.LayoutOps
+open Microsoft.FSharp.Text.StructuredPrintfImpl.TaggedTextOps
 
 #nowarn "52" //  The value has been copied to ensure the original is not mutated by this operation
 
 #if FX_RESHAPED_REFLECTION
 open PrimReflectionAdapters
 open ReflectionAdapters
-type BindingFlags = ReflectionAdapters.BindingFlags
 #endif
 
 //--------------------------------------------------------------------------
@@ -91,14 +90,16 @@ open Helpers
 [<CompiledName("FSharpVar")>]
 [<System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage","CA2218:OverrideGetHashCodeOnOverridingEquals",Justification="Equals override does not equate further objects, so default GetHashCode is still valid")>]
 type Var(name: string, typ:Type, ?isMutable: bool) =
-
     inherit obj()
-    static let mutable lastStamp = 0L
+
+    static let getStamp =
+        let mutable lastStamp = -1L // first value retrieved will be 0
+        fun () -> System.Threading.Interlocked.Increment &lastStamp
+
     static let globals = new Dictionary<(string*Type),Var>(11)
 
-    let stamp = lastStamp    
+    let stamp = getStamp ()
     let isMutable = defaultArg isMutable false
-    do lock globals (fun () -> lastStamp <- lastStamp + 1L)
     
     member v.Name = name
     member v.IsMutable = isMutable
@@ -132,8 +133,7 @@ type Var(name: string, typ:Type, ?isMutable: bool) =
                 if System.Object.ReferenceEquals(v,v2) then 0 else
                 let c = compare v.Name v2.Name 
                 if c <> 0 then c else 
-#if FX_NO_REFLECTION_METADATA_TOKENS // not available on Compact Framework
-#else
+#if !FX_NO_REFLECTION_METADATA_TOKENS // not available on Compact Framework
                 let c = compare v.Type.MetadataToken v2.Type.MetadataToken 
                 if c <> 0 then c else 
                 let c = compare v.Type.Module.MetadataToken v2.Type.Module.MetadataToken 
@@ -179,7 +179,7 @@ and
     | CoerceOp     of Type
     | NewArrayOp    of Type
     | NewDelegateOp   of Type
-    | QuoteOp 
+    | QuoteOp of bool
     | SequentialOp 
     | AddressOfOp 
     | VarSetOp
@@ -190,16 +190,28 @@ and
     | ForIntegerRangeLoopOp 
     | WhileLoopOp 
     // Arbitrary spliced values - not serialized
-    | ValueOp of obj * Type
+    | ValueOp of obj * Type * string option
+    | WithValueOp of obj * Type 
     | DefaultValueOp of Type
     
 and [<CompiledName("FSharpExpr")>]
     Expr(term:Tree,attribs:Expr list) =
     member x.Tree = term
     member x.CustomAttributes = attribs 
-    override x.Equals(obj:obj) =
-        match obj with 
-        | :? Expr as yt -> x.Tree = yt.Tree
+
+    override x.Equals(yobj) = 
+        match yobj with 
+        | :? Expr as y -> 
+            let rec eq t1 t2 = 
+                match t1, t2 with 
+                // We special-case ValueOp to ensure that ValueWithName = Value
+                | CombTerm(ValueOp(v1,ty1,_),[]),CombTerm(ValueOp(v2,ty2,_),[]) -> (v1 = v2) && (ty1 = ty2)
+                | CombTerm(c1, es1), CombTerm(c2,es2) -> c1 = c2 && es1.Length = es2.Length && (es1 = es2)
+                | VarTerm v1, VarTerm v2 -> (v1 = v2)
+                | LambdaTerm (v1,e1), LambdaTerm(v2,e2) -> (v1 = v2) && (e1 = e2)
+                | HoleTerm (ty1,n1), HoleTerm(ty2,n2) -> (ty1 = ty2) && (n1 = n2)
+                | _ -> false
+            eq x.Tree y.Tree
         | _ -> false
 
     override x.GetHashCode() = 
@@ -214,22 +226,23 @@ and [<CompiledName("FSharpExpr")>]
         let expr (e:Expr ) = e.GetLayout(long)
         let exprs (es:Expr list) = es |> List.map expr
         let parens ls = bracketL (commaListL ls)
-        let pairL l1 l2 = bracketL (l1 ^^ sepL "," ^^ l2)
+        let pairL l1 l2 = bracketL (l1 ^^ sepL Literals.comma ^^ l2)
         let listL ls = squareBracketL (commaListL ls)
-        let combL nm ls = wordL nm ^^ parens ls
-        let noneL = wordL "None"
-        let someL e = combL "Some" [expr e]
-        let typeL (o: Type)  = wordL (if long then o.FullName else o.Name)
-        let objL (o: 'T)  = wordL (sprintf "%A" o)
-        let varL (v:Var) = wordL v.Name
+        let combTaggedL nm ls = wordL nm ^^ parens ls
+        let combL nm ls = combTaggedL (tagKeyword nm) ls
+        let noneL = wordL (tagProperty "None")
+        let someL e = combTaggedL (tagMethod "Some") [expr e]
+        let typeL (o: Type)  = wordL (tagClass (if long then o.FullName else o.Name))
+        let objL (o: 'T)  = wordL (tagText (sprintf "%A" o))
+        let varL (v:Var) = wordL (tagLocal v.Name)
         let (|E|) (e: Expr) = e.Tree
         let (|Lambda|_|)        (E x) = match x with LambdaTerm(a,b)  -> Some (a,b) | _ -> None 
         let (|IteratedLambda|_|) (e: Expr) = qOneOrMoreRLinear (|Lambda|_|) e
-        let ucaseL (unionCase:UnionCaseInfo) = (if long then objL unionCase else wordL unionCase.Name) 
-        let minfoL (minfo: MethodInfo) = if long then objL minfo else wordL minfo.Name 
-        let cinfoL (cinfo: ConstructorInfo) = if long then objL cinfo else wordL cinfo.DeclaringType.Name
-        let pinfoL (pinfo: PropertyInfo) = if long then objL pinfo else wordL pinfo.Name
-        let finfoL (finfo: FieldInfo) = if long then objL finfo else wordL finfo.Name
+        let ucaseL (unionCase:UnionCaseInfo) = (if long then objL unionCase else wordL (tagUnionCase unionCase.Name)) 
+        let minfoL (minfo: MethodInfo) = if long then objL minfo else wordL (tagMethod minfo.Name) 
+        let cinfoL (cinfo: ConstructorInfo) = if long then objL cinfo else wordL (tagMethod cinfo.DeclaringType.Name)
+        let pinfoL (pinfo: PropertyInfo) = if long then objL pinfo else wordL (tagProperty pinfo.Name)
+        let finfoL (finfo: FieldInfo) = if long then objL finfo else wordL (tagField finfo.Name)
         let rec (|NLambdas|_|) n (e:Expr) = 
             match e with 
             | _ when n <= 0 -> Some([],e) 
@@ -246,7 +259,9 @@ and [<CompiledName("FSharpExpr")>]
         | CombTerm(UnionCaseTestOp(unionCase),args)   -> combL "UnionCaseTest" (exprs args@ [ucaseL unionCase])
         | CombTerm(NewTupleOp _,args)            -> combL "NewTuple" (exprs args)
         | CombTerm(TupleGetOp (_,i),[arg])         -> combL "TupleGet" ([expr arg] @ [objL i])
-        | CombTerm(ValueOp(v,_),[])               -> combL "Value" [objL v]
+        | CombTerm(ValueOp(v,_,Some nm),[])               -> combL "ValueWithName" [objL v; wordL (tagLocal nm)]
+        | CombTerm(ValueOp(v,_,None),[])               -> combL "Value" [objL v]
+        | CombTerm(WithValueOp(v,_),[defn])               -> combL "WithValue" [objL v; expr defn]
         | CombTerm(InstanceMethodCallOp(minfo),obj::args) -> combL "Call"     [someL obj; minfoL minfo; listL (exprs args)]
         | CombTerm(StaticMethodCallOp(minfo),args)        -> combL "Call"     [noneL;     minfoL minfo; listL (exprs args)]
         | CombTerm(InstancePropGetOp(pinfo),(obj::args))  -> combL "PropertyGet"  [someL obj; pinfoL pinfo; listL (exprs args)]
@@ -276,10 +291,10 @@ and [<CompiledName("FSharpExpr")>]
             | NLambdas n (vs,e) -> combL "NewDelegate" ([typeL ty] @ (vs |> List.map varL) @ [expr e])
             | _ -> combL "NewDelegate" [typeL ty; expr e]
         //| CombTerm(_,args)   -> combL "??" (exprs args)
-        | VarTerm(v)   -> wordL v.Name
+        | VarTerm(v)   -> wordL (tagLocal v.Name)
         | LambdaTerm(v,b)   -> combL "Lambda" [varL v; expr b]
-        | HoleTerm _  -> wordL "_"
-        | CombTerm(QuoteOp,args) -> combL "Quote" (exprs args)
+        | HoleTerm _  -> wordL (tagLocal "_")
+        | CombTerm(QuoteOp _,args) -> combL "Quote" (exprs args)
         | _ -> failwithf "Unexpected term in layout %A" x.Tree
 
      
@@ -343,6 +358,7 @@ module Patterns =
 
     let mkArrayTy (t:Type) = t.MakeArrayType();
     let mkExprTy (t:Type) = exprTyC.MakeGenericType([| t |])
+    let rawExprTy = typeof<Expr>
 
 
     //--------------------------------------------------------------------------
@@ -367,7 +383,13 @@ module Patterns =
     let (|Lambda|_|)        (E x) = match x with LambdaTerm(a,b)  -> Some (a,b) | _ -> None 
 
     [<CompiledName("QuotePattern")>]
-    let (|Quote|_|)         (E x) = match x with CombTerm(QuoteOp,[a])     -> Some (a)   | _ -> None 
+    let (|Quote|_|)         (E x) = match x with CombTerm(QuoteOp _,[a])     -> Some (a)   | _ -> None 
+
+    [<CompiledName("QuoteRawPattern")>]
+    let (|QuoteRaw|_|)         (E x) = match x with CombTerm(QuoteOp false,[a])     -> Some (a)   | _ -> None 
+
+    [<CompiledName("QuoteTypedPattern")>]
+    let (|QuoteTyped|_|)         (E x) = match x with CombTerm(QuoteOp true,[a])     -> Some (a)   | _ -> None 
 
     [<CompiledName("IfThenElsePattern")>]
     let (|IfThenElse|_|)          = function Comb3(IfThenElseOp,e1,e2,e3) -> Some(e1,e2,e3) | _ -> None
@@ -412,10 +434,16 @@ module Patterns =
     let (|VarSet|_|    )    = function E(CombTerm(VarSetOp,[E(VarTerm(v)); e])) -> Some(v,e) | _ -> None
 
     [<CompiledName("ValuePattern")>]
-    let (|Value|_|)         = function E(CombTerm(ValueOp (v,ty),_)) -> Some(v,ty) | _ -> None
+    let (|Value|_|)         = function E(CombTerm(ValueOp (v,ty,_),_)) -> Some(v,ty) | _ -> None
 
     [<CompiledName("ValueObjPattern")>]
-    let (|ValueObj|_|)      = function E(CombTerm(ValueOp (v,_),_)) -> Some(v) | _ -> None
+    let (|ValueObj|_|)      = function E(CombTerm(ValueOp (v,_,_),_)) -> Some(v) | _ -> None
+
+    [<CompiledName("ValueWithNamePattern")>]
+    let (|ValueWithName|_|) = function E(CombTerm(ValueOp (v,ty,Some nm),_)) -> Some(v,ty,nm) | _ -> None
+
+    [<CompiledName("WithValuePattern")>]
+    let (|WithValue|_|) = function E(CombTerm(WithValueOp (v,ty),[e])) -> Some(v,ty,e) | _ -> None
 
     [<CompiledName("AddressOfPattern")>]
     let (|AddressOf|_|)       = function Comb1(AddressOfOp,e) -> Some(e) | _ -> None
@@ -510,7 +538,7 @@ module Patterns =
         if index < 0 || index >= fields.Length then invalidArg "index" (SR.GetString(SR.QinvalidCaseIndex))
         fields.[index]
  
-    /// Returns type of lambda applciation - something like "(fun a -> ..) b"
+    /// Returns type of lambda application - something like "(fun a -> ..) b"
     let rec typeOfAppliedLambda f =
         let fty = ((typeOf f):Type) 
         match fty.GetGenericArguments() with 
@@ -535,7 +563,8 @@ module Patterns =
             | NewRecordOp ty,_         -> ty
             | NewUnionCaseOp unionCase,_   -> unionCase.DeclaringType
             | UnionCaseTestOp _,_ -> typeof<Boolean>
-            | ValueOp (_, ty),_  -> ty
+            | ValueOp (_, ty, _),_  -> ty
+            | WithValueOp (_, ty),_  -> ty
             | TupleGetOp (ty,i),_ -> FSharpType.GetTupleElements(ty).[i] 
             | NewTupleOp ty,_      -> ty
             | StaticPropGetOp prop,_    -> prop.PropertyType
@@ -556,14 +585,15 @@ module Patterns =
             | NewDelegateOp ty,_     -> ty
             | DefaultValueOp ty,_     -> ty
             | TypeTestOp _,_     -> typeof<bool>
-            | QuoteOp,[expr]        -> mkExprTy (typeOf expr)
+            | QuoteOp true,[expr]        -> mkExprTy (typeOf expr)
+            | QuoteOp false,[_]        -> rawExprTy
             | TryFinallyOp,[e1;_]        -> typeOf e1
             | TryWithOp,[e1;_;_]        -> typeOf e1
             | WhileLoopOp,_ 
             | VarSetOp,_
             | AddressSetOp,_ -> typeof<Unit> 
             | AddressOfOp,_ -> raise <| System.InvalidOperationException (SR.GetString(SR.QcannotTakeAddress))
-            | (QuoteOp | SequentialOp | TryWithOp | TryFinallyOp | IfThenElseOp | AppOp),_ -> failwith "unreachable"
+            | (QuoteOp _ | SequentialOp | TryWithOp | TryFinallyOp | IfThenElseOp | AppOp),_ -> failwith "unreachable"
 
 
     //--------------------------------------------------------------------------
@@ -612,7 +642,7 @@ module Patterns =
         if not (assignableFrom declType (typeOf obj)) then invalidArg "obj" (SR.GetString(SR.QincorrectInstanceType))
 
       
-    // Checks lambda application for correctnes
+    // Checks lambda application for correctness
     let checkAppliedLambda (f, v) =
         let fty = typeOf f
         let ftyG = (if fty.IsGenericType then  fty.GetGenericTypeDefinition()  else fty)
@@ -635,13 +665,15 @@ module Patterns =
   
     // [Correct by definition]
     let mkVar v       = E(VarTerm v )
-    let mkQuote(a)    = E(CombTerm(QuoteOp,[(a:>Expr)] ))
+    let mkQuote(a,isTyped)    = E(CombTerm(QuoteOp isTyped,[(a:>Expr)] ))
           
-    let mkValue (v,ty) = mkFE0 (ValueOp(v,ty))
+    let mkValue (v,ty) = mkFE0 (ValueOp(v,ty,None))
+    let mkValueWithName (v,ty,nm) = mkFE0 (ValueOp(v,ty,Some nm))
+    let mkValueWithDefn (v,ty,defn) = mkFE1 (WithValueOp(v,ty)) defn
     let mkValueG (v:'T) = mkValue(box v, typeof<'T>)
     let mkLiftedValueOpG (v, ty: System.Type) = 
         let obj = if ty.IsEnum then System.Enum.ToObject(ty, box v) else box v
-        ValueOp(obj, ty)
+        ValueOp(obj, ty, None)
     let mkUnit       () = mkValue(null, typeof<unit>)
     let mkAddressOf     v = mkFE1 AddressOfOp v
     let mkSequential  (e1,e2) = mkFE2 SequentialOp (e1,e2) 
@@ -653,7 +685,7 @@ module Patterns =
     let mkTryFinally(e1,e2) = mkFE2 TryFinallyOp (e1,e2)
     
     let mkCoerce      (ty,x) = mkFE1 (CoerceOp ty) x
-    let mkNull        (ty)   = mkFE0 (ValueOp(null,ty))
+    let mkNull        (ty)   = mkFE0 (ValueOp(null,ty,None))
     
     let mkApplication v = checkAppliedLambda v; mkFE2 AppOp v 
 
@@ -900,14 +932,14 @@ module Patterns =
             | Some methInfo -> methInfo 
 
     let bindMethodHelper (parentT: Type, nm,marity,argtys,rty) =
-      if parentT = null then invalidArg "parentT" (SR.GetString(SR.QparentCannotBeNull))
+      if isNull parentT then invalidArg "parentT" (SR.GetString(SR.QparentCannotBeNull))
       if marity = 0 then 
           let tyargTs = if parentT.IsGenericType then parentT.GetGenericArguments() else [| |] 
           let argTs = Array.ofList (List.map (instFormal tyargTs) argtys) 
           let resT  = instFormal tyargTs rty 
           let methInfo = 
               try 
-#if FX_ATLEAST_PORTABLE
+#if FX_PORTABLE_OR_NETSTANDARD
                  match parentT.GetMethod(nm,argTs) with 
 #else              
                  match parentT.GetMethod(nm,staticOrInstanceBindingFlags,null,argTs,null) with 
@@ -939,7 +971,7 @@ module Patterns =
         let tyArgs = List.toArray tyArgs
         let methInfo = 
             try 
-#if FX_ATLEAST_PORTABLE
+#if FX_PORTABLE_OR_NETSTANDARD
                 match ty.GetMethod(nm, argTypes) with 
 #else             
                 match ty.GetMethod(nm,staticOrInstanceBindingFlags,null, argTypes,null) with 
@@ -1062,7 +1094,7 @@ module Patterns =
         let typ = mkNamedType(tc,tyargs)
         let argtyps : Type list = argTypes |> inst tyargs
         let retType : Type = retType |> inst tyargs |> removeVoid
-#if FX_ATLEAST_PORTABLE
+#if FX_PORTABLE_OR_NETSTANDARD
         try 
             typ.GetProperty(propName, staticOrInstanceBindingFlags) 
         with :? AmbiguousMatchException -> null // more than one property found with the specified name and matching binding constraints - return null to initiate manual search
@@ -1077,7 +1109,7 @@ module Patterns =
 
     let bindGenericCtor (tc:Type,argTypes:Instantiable<Type list>) =
         let argtyps =  instFormal (getGenericArguments tc) argTypes
-#if FX_ATLEAST_PORTABLE
+#if FX_PORTABLE_OR_NETSTANDARD
         let argTypes = Array.ofList argtyps
         tc.GetConstructor(argTypes) 
         |> bindCtorBySearchIfCandidateIsNull tc argTypes
@@ -1088,7 +1120,7 @@ module Patterns =
     let bindCtor (tc,argTypes:Instantiable<Type list>,tyargs) =
         let typ = mkNamedType(tc,tyargs)
         let argtyps = argTypes |> inst tyargs
-#if FX_ATLEAST_PORTABLE
+#if FX_PORTABLE_OR_NETSTANDARD
         let argTypes = Array.ofList argtyps
         typ.GetConstructor(argTypes) 
         |> bindCtorBySearchIfCandidateIsNull typ argTypes
@@ -1135,8 +1167,9 @@ module Patterns =
         [<NoEquality; NoComparison>]
         type InputState = 
           { is: ByteStream; 
-            istrings: string array;
-            localAssembly: System.Reflection.Assembly  }
+            istrings: string[];
+            localAssembly: System.Reflection.Assembly 
+            referencedTypeDefs: Type[] }
 
         let u_byte_as_int st = st.is.ReadByte() 
 
@@ -1203,18 +1236,20 @@ module Patterns =
             | n -> failwith ("u_list: found number " + string n)
         let u_list f st = u_list_aux f [] st
          
-        let unpickle_obj localAssembly u phase2bytes =
+        let unpickleObj localAssembly referencedTypeDefs u phase2bytes =
             let phase2data = 
                 let st2 = 
-                   { is = new ByteStream(phase2bytes,0,phase2bytes.Length); 
-                     istrings = [| |];
-                     localAssembly=localAssembly }
+                   { is = new ByteStream(phase2bytes,0,phase2bytes.Length)
+                     istrings = [| |]
+                     localAssembly=localAssembly
+                     referencedTypeDefs=referencedTypeDefs  }
                 u_tup2 (u_list prim_u_string) u_bytes st2 
             let stringTab,phase1bytes = phase2data 
             let st1 = 
-               { is = new ByteStream(phase1bytes,0,phase1bytes.Length); 
-                 istrings = Array.ofList stringTab;
-                   localAssembly=localAssembly } 
+               { is = new ByteStream(phase1bytes,0,phase1bytes.Length)
+                 istrings = Array.ofList stringTab
+                 localAssembly=localAssembly
+                 referencedTypeDefs=referencedTypeDefs  } 
             let res = u st1 
             res 
 
@@ -1243,8 +1278,8 @@ module Patterns =
     let decodeNamedTy tc tsR = mkNamedType(tc,tsR)
 
     let mscorlib = typeof<System.Int32>.Assembly
-    let u_assref st = 
-        let a = u_string st 
+    let u_assref st = u_string st 
+    let decodeAssemblyRef st a =
         if a = "" then mscorlib
         elif a = "." then st.localAssembly 
         else 
@@ -1258,14 +1293,24 @@ module Patterns =
         
     let u_NamedType st = 
         let a,b = u_tup2 u_string u_assref st 
-        mkNamedTycon (a,b)
+        let mutable idx = 0
+        // From FSharp.Core for F# 4.0+ (4.4.0.0+), referenced type definitions can be integer indexes into a table of type definitions provided on quotation 
+        // deserialization, avoiding the need for System.Reflection.Assembly.Load
+        if System.Int32.TryParse(a, &idx) && b = ""  then
+            st.referencedTypeDefs.[idx]
+        else 
+            // escape commas found in type name, which are not already escaped
+            // '\' is not valid in a type name except as an escape character, so logic can be pretty simple
+            let escapedTcName = System.Text.RegularExpressions.Regex.Replace(a, @"(?<!\\),", @"\,")
+            let assref = decodeAssemblyRef st b
+            mkNamedTycon (escapedTcName, assref)
 
     let u_tyconstSpec st = 
       let tag = u_byte_as_int st 
       match tag with 
-      | 1 -> u_unit             st |> (fun () -> decodeFunTy) 
+      | 1 -> u_unit      st |> (fun () -> decodeFunTy) 
       | 2 -> u_NamedType st |> decodeNamedTy 
-      | 3 -> u_int              st |> decodeArrayTy
+      | 3 -> u_int       st |> decodeArrayTy
       | _ -> failwith "u_tyconstSpec" 
 
     let appL fs env = List.map (fun f -> f env) fs
@@ -1284,17 +1329,26 @@ module Patterns =
     
     [<NoEquality; NoComparison>]
     type BindingEnv = 
-        { vars : Map<int,Var>; 
-          varn: int; 
+        { /// Mapping from variable index to Var object for the variable
+          vars : Map<int,Var>
+          /// The number of indexes in the mapping
+          varn: int
+          /// The active type instantiation for generic type parameters
           typeInst : int -> Type }
 
     let addVar env v = 
         { env with vars = env.vars.Add(env.varn,v); varn=env.varn+1 }
 
-    let envClosed (types:Type[])  =
-        { vars = Map.empty; 
-          varn = 0;
-          typeInst = fun (n:int) -> types.[n] }
+    let mkTyparSubst (tyargs:Type[]) =
+        let n = tyargs.Length 
+        fun idx -> 
+          if idx < n then tyargs.[idx]
+          else raise <| System.InvalidOperationException (SR.GetString(SR.QtypeArgumentOutOfRange))
+
+    let envClosed (spliceTypes:Type[])  =
+        { vars = Map.empty;
+          varn = 0
+          typeInst = mkTyparSubst spliceTypes }
 
     type Bindable<'T> = BindingEnv -> 'T
     
@@ -1321,22 +1375,28 @@ module Patterns =
                let idx = u_int st
                (fun env -> E(HoleTerm(a env.typeInst , idx)))
         | 4 -> let a = u_Expr st
-               (fun env -> mkQuote(a env))
+               (fun env -> mkQuote(a env, true))
         | 5 -> let a = u_Expr st
                let attrs = u_list u_Expr st
                (fun env -> let e = (a env) in EA(e.Tree,(e.CustomAttributes @ List.map (fun attrf -> attrf env) attrs)))
         | 6 -> let a = u_dtype st
                (fun env -> mkVar(Var.Global("this", a env.typeInst)))
+        | 7 -> let a = u_Expr st
+               (fun env -> mkQuote(a env, false))
         | _ -> failwith "u_Expr"
+
     and u_VarDecl st = 
         let s,b,mut = u_tup3 u_string u_dtype u_bool st 
         (fun env -> new Var(s, b env.typeInst, mut))
+
     and u_VarRef st = 
         let i = u_int st 
         (fun env -> env.vars.[i])
+
     and u_RecdField st = 
         let ty,nm = u_tup2 u_NamedType u_string st  
         (fun tyargs -> getRecordProperty(mkNamedType(ty,tyargs),nm)) 
+
     and u_UnionCaseInfo st = 
         let ty,nm = u_tup2 u_NamedType u_string st  
         (fun tyargs -> getUnionCaseInfo(mkNamedType(ty,tyargs),nm)) 
@@ -1434,7 +1494,7 @@ module Patterns =
             | 37 -> u_tup2 u_NamedType u_string st |> (fun (a,b) tyargs -> let finfo = bindField(a,b,tyargs) in if finfo.IsStatic then StaticFieldGetOp(finfo) else InstanceFieldGetOp(finfo))
             | 38 -> u_void           st |> (fun () NoTyArgs -> LetRecCombOp)
             | 39 -> u_void           st |> (fun () NoTyArgs -> AppOp)
-            | 40 -> u_void           st |> (fun () (OneTyArg(ty)) -> ValueOp(null,ty))
+            | 40 -> u_void           st |> (fun () (OneTyArg(ty)) -> ValueOp(null,ty,None))
             | 41 -> u_void           st |> (fun () (OneTyArg(ty)) -> DefaultValueOp(ty))
             | 42 -> u_PropInfoData   st |> (fun (a,b,c,d) tyargs -> let pinfo = bindProp(a,b,c,d,tyargs) in if pinfoIsStatic pinfo then StaticPropSetOp(pinfo) else InstancePropSetOp(pinfo))
             | 43 -> u_tup2 u_NamedType u_string st |> (fun (a,b) tyargs -> let finfo = bindField(a,b,tyargs) in if finfo.IsStatic then StaticFieldSetOp(finfo) else InstanceFieldSetOp(finfo))
@@ -1449,9 +1509,11 @@ module Patterns =
     let u_ReflectedDefinition = u_tup2 u_MethodBase u_Expr
     let u_ReflectedDefinitions = u_list u_ReflectedDefinition
 
-    let unpickleExpr (localType : System.Type) = unpickle_obj localType.Assembly u_Expr 
+    let unpickleExpr (localType: Type) referencedTypes bytes = 
+        unpickleObj localType.Assembly referencedTypes u_Expr bytes
 
-    let unpickleReflectedDefns (localAssembly : System.Reflection.Assembly) = unpickle_obj localAssembly u_ReflectedDefinitions
+    let unpickleReflectedDefns localAssembly referencedTypes bytes = 
+        unpickleObj localAssembly referencedTypes u_ReflectedDefinitions bytes
 
     //--------------------------------------------------------------------------
     // General utilities that will eventually be folded into 
@@ -1487,12 +1549,6 @@ module Patterns =
             res <-  f (match res with Some a -> a | _ -> failwith "internal error") e.Current;
         res      
     
-    let mkTyparSubst (tyargs:Type[]) =
-        let n = tyargs.Length 
-        fun idx -> 
-          if idx < n then tyargs.[idx]
-          else raise <| System.InvalidOperationException (SR.GetString(SR.QtypeArgumentOutOfRange))
-
     [<NoEquality; NoComparison>]
     exception Clash of Var
 
@@ -1536,8 +1592,7 @@ module Patterns =
 
     let decodedTopResources = new Dictionary<Assembly * string, int>(10,HashIdentity.Structural)
 
-#if FX_NO_REFLECTION_METADATA_TOKENS
-#else
+#if !FX_NO_REFLECTION_METADATA_TOKENS
 #if FX_NO_REFLECTION_MODULE_HANDLES // not available on Silverlight
     [<StructuralEquality;StructuralComparison>]
     type ModuleHandle = ModuleHandle of string * string
@@ -1662,7 +1717,7 @@ module Patterns =
                         ci
                 let paramTypes = mi.GetParameters() |> getTypesFromParamInfos
                 Key(declaringType, tyArgsCount, methodBase.Name, paramTypes, declaringType)
-            | _ -> failwith "Unexpected MethodBase type, %A" (methodBase.GetType()) // per MSDN ConstructorInfo and MethodInfo are the only derived types from MethodBase
+            | _ -> failwithf "Unexpected MethodBase type, %A" (methodBase.GetType()) // per MSDN ConstructorInfo and MethodInfo are the only derived types from MethodBase
 #else
     [<StructuralEquality; NoComparison>]
     type ReflectedDefinitionTableKey = 
@@ -1676,43 +1731,55 @@ module Patterns =
 
     let reflectedDefinitionTable = new Dictionary<ReflectedDefinitionTableKey,ReflectedDefinitionTableEntry>(10,HashIdentity.Structural)
 
-    let registerReflectedDefinitions (assem: Assembly, rn, bytes: byte[]) =
-        let defns = unpickleReflectedDefns assem  bytes 
-        defns |> List.iter (fun (minfo,e) -> 
-            //printfn "minfo = %A, handle = %A, token = %A" minfo minfo.Module.ModuleHandle minfo.MetadataToken
+    let registerReflectedDefinitions (assem, resourceName, bytes, referencedTypes) =
+        let defns = unpickleReflectedDefns assem referencedTypes bytes 
+        defns |> List.iter (fun (minfo,exprBuilder) -> 
             let key = ReflectedDefinitionTableKey.GetKey minfo
             lock reflectedDefinitionTable (fun () -> 
-                //printfn "Adding %A, hc = %d" key (key.GetHashCode());
-                reflectedDefinitionTable.Add(key,Entry(e))));
-        //System.Console.WriteLine("Added {0} resource {1}", assem.FullName, rn);
-        decodedTopResources.Add((assem,rn),0)
+                reflectedDefinitionTable.Add(key,Entry(exprBuilder))))
+        decodedTopResources.Add((assem,resourceName),0)
 
-    let resolveMethodBase (methodBase: MethodBase, tyargs: Type []) =
+    let tryGetReflectedDefinition (methodBase: MethodBase, tyargs: Type []) =
         checkNonNull "methodBase" methodBase
         let data = 
-            let assem = methodBase.DeclaringType.Assembly
-            let key = ReflectedDefinitionTableKey.GetKey methodBase
-            //printfn "Looking for %A, hc = %d, hc2 = %d" key (key.GetHashCode()) (assem.GetHashCode());
-            let ok,res = lock reflectedDefinitionTable (fun () -> reflectedDefinitionTable.TryGetValue(key))
-            if ok then Some(res) else
-            //System.Console.WriteLine("Loading {0}", td.Assembly);
+          let assem = methodBase.DeclaringType.Assembly
+          let key = ReflectedDefinitionTableKey.GetKey methodBase
+          let ok,res = lock reflectedDefinitionTable (fun () -> reflectedDefinitionTable.TryGetValue(key))
+
+          if ok then Some res else
+
             let qdataResources = 
                 // dynamic assemblies don't support the GetManifestResourceNames 
                 match assem with 
-#if FX_NO_REFLECTION_EMIT
-#else
-                | :? System.Reflection.Emit.AssemblyBuilder -> []
+#if !FX_NO_REFLECTION_EMIT
+                | a when a.FullName = "System.Reflection.Emit.AssemblyBuilder" -> []
 #endif
-                | _ -> 
-                    (try assem.GetManifestResourceNames()  
-                     // This raises NotSupportedException for dynamic assemblies
-                     with :? NotSupportedException -> [| |])
-                    |> Array.toList 
-                    |> List.filter (fun rn -> 
-                          //System.Console.WriteLine("Considering resource {0}", rn);
-                          rn.StartsWith(ReflectedDefinitionsResourceNameBase,StringComparison.Ordinal) &&
-                          not (decodedTopResources.ContainsKey((assem,rn)))) 
-                    |> List.map (fun rn -> rn,unpickleReflectedDefns assem (readToEnd (assem.GetManifestResourceStream(rn)))) 
+                | null | _ -> 
+                    let resources = 
+                        // This raises NotSupportedException for dynamic assemblies
+                        try assem.GetManifestResourceNames()
+                        with :? NotSupportedException -> [| |]
+                    [ for resourceName in resources do
+                          if resourceName.StartsWith(ReflectedDefinitionsResourceNameBase,StringComparison.Ordinal) &&
+                             not (decodedTopResources.ContainsKey((assem,resourceName))) then 
+
+                            let cmaAttribForResource = 
+#if FX_RESHAPED_REFLECTION
+                                CustomAttributeExtensions.GetCustomAttributes(assem, typeof<CompilationMappingAttribute>) |> Seq.toArray
+#else
+                                assem.GetCustomAttributes(typeof<CompilationMappingAttribute>, false)
+#endif
+                                |> (function null -> [| |] | x -> x)
+                                |> Array.tryPick (fun ca -> 
+                                     match ca with 
+                                     | :? CompilationMappingAttribute as cma when cma.ResourceName = resourceName -> Some cma 
+                                     | _ -> None) 
+                            let resourceBytes = readToEnd (assem.GetManifestResourceStream(resourceName))
+                            let referencedTypes = 
+                                match cmaAttribForResource with 
+                                | None -> [| |]
+                                | Some cma -> cma.TypeDefinitions
+                            yield (resourceName,unpickleReflectedDefns assem referencedTypes resourceBytes) ]
                 
             // ok, add to the table
             let ok,res = 
@@ -1720,15 +1787,15 @@ module Patterns =
                      // check another thread didn't get in first
                      if not (reflectedDefinitionTable.ContainsKey(key)) then
                          qdataResources 
-                         |> List.iter (fun (rn,defns) ->
-                             defns |> List.iter (fun (methodBase,e) -> 
-                                reflectedDefinitionTable.[ReflectedDefinitionTableKey.GetKey methodBase] <- Entry(e));
-                             decodedTopResources.Add((assem,rn),0))
+                         |> List.iter (fun (resourceName,defns) ->
+                             defns |> List.iter (fun (methodBase,exprBuilder) -> 
+                                reflectedDefinitionTable.[ReflectedDefinitionTableKey.GetKey methodBase] <- Entry(exprBuilder));
+                             decodedTopResources.Add((assem,resourceName),0))
                      // we know it's in the table now, if it's ever going to be there
                      reflectedDefinitionTable.TryGetValue(key) 
                 );
 
-            if ok then Some(res) else None
+            if ok then Some res else None
 
         match data with 
         | Some (Entry(exprBuilder)) -> 
@@ -1739,10 +1806,10 @@ module Patterns =
                  | _ -> 0)
             if (expectedNumTypars <> tyargs.Length) then 
                 invalidArg "tyargs" (SR.GetString3(SR.QwrongNumOfTypeArgs, methodBase.Name, expectedNumTypars.ToString(), tyargs.Length.ToString()));
-            Some(exprBuilder {typeInst = mkTyparSubst tyargs; vars=Map.empty; varn=0})
+            Some(exprBuilder (envClosed tyargs))
         | None -> None
 
-    let resolveMethodBaseInstantiated (methodBase:MethodBase) = 
+    let tryGetReflectedDefinitionInstantiated (methodBase:MethodBase) = 
         checkNonNull "methodBase" methodBase
         match methodBase with 
         | :? MethodInfo as minfo -> 
@@ -1750,16 +1817,16 @@ module Patterns =
                    Array.append
                        (getGenericArguments minfo.DeclaringType)
                        (if minfo.IsGenericMethod then minfo.GetGenericArguments() else [| |])
-               resolveMethodBase (methodBase, tyargs)
+               tryGetReflectedDefinition (methodBase, tyargs)
         | :? ConstructorInfo as cinfo -> 
                let tyargs = getGenericArguments cinfo.DeclaringType
-               resolveMethodBase (methodBase, tyargs)
+               tryGetReflectedDefinition (methodBase, tyargs)
         | _ -> 
-               resolveMethodBase (methodBase, [| |])
+               tryGetReflectedDefinition (methodBase, [| |])
 
-    let deserialize (localAssembly, types, splices, bytes) : Expr = 
-        let expr = unpickleExpr localAssembly bytes (envClosed  (Array.ofList types))
-        fillHolesInRawExpr (Array.ofList splices) expr
+    let deserialize (localAssembly, referencedTypeDefs, spliceTypes, spliceExprs, bytes) : Expr = 
+        let expr = unpickleExpr localAssembly referencedTypeDefs bytes (envClosed spliceTypes)
+        fillHolesInRawExpr spliceExprs expr
         
   
     let cast (expr: Expr) : Expr<'T> = 
@@ -1803,8 +1870,6 @@ type Expr with
 
     static member ForIntegerRangeLoop (v, start:Expr, finish:Expr, body:Expr) = 
         mkForLoop(v, start, finish, body)
-    //static member Range: Expr * Expr -> Expr 
-    //static member RangeStep: Expr * Expr * Expr -> Expr 
 
     static member FieldGet (fieldInfo:FieldInfo) = 
         checkNonNull "fieldInfo" fieldInfo
@@ -1869,7 +1934,11 @@ type Expr with
     static member PropertySet (property:PropertyInfo, value:Expr, ?args) = 
         mkStaticPropSet(property, defaultArg args [], value)
 
-    static member Quote (expr:Expr) = mkQuote expr
+    static member Quote (expr:Expr) = mkQuote (expr, true)
+
+    static member QuoteRaw (expr:Expr) = mkQuote (expr, false)
+
+    static member QuoteTyped (expr:Expr) = mkQuote (expr, true)
 
     static member Sequential (e1:Expr, e2:Expr) = 
         mkSequential (e1, e2)
@@ -1897,6 +1966,24 @@ type Expr with
         checkNonNull "expressionType" expressionType
         mkValue(obj, expressionType)
 
+    static member ValueWithName (v:'T, name:string) = 
+        checkNonNull "name" name
+        mkValueWithName (box v, typeof<'T>, name)
+
+    static member ValueWithName(obj: obj, expressionType: Type, name:string) = 
+        checkNonNull "expressionType" expressionType
+        checkNonNull "name" name
+        mkValueWithName(obj, expressionType, name)
+
+    static member WithValue (v:'T, definition: Expr<'T>) = 
+        let raw = mkValueWithDefn(box v, typeof<'T>, definition)
+        new Expr<'T>(raw.Tree,raw.CustomAttributes)
+
+    static member WithValue(obj: obj, expressionType: Type, definition: Expr) = 
+        checkNonNull "expressionType" expressionType
+        mkValueWithDefn (obj, expressionType, definition)
+
+
     static member Var(v) = 
         mkVar(v)
 
@@ -1906,21 +1993,31 @@ type Expr with
     static member WhileLoop (e1:Expr, e2:Expr) = 
         mkWhileLoop (e1, e2)
 
-    //static member IsInlinedMethodInfo(minfo:MethodInfo) = false
     static member TryGetReflectedDefinition(methodBase:MethodBase) = 
         checkNonNull "methodBase" methodBase
-        resolveMethodBaseInstantiated(methodBase)
+        tryGetReflectedDefinitionInstantiated(methodBase)
 
     static member Cast(expr:Expr) = cast expr
 
     static member Deserialize(qualifyingType:Type, spliceTypes, spliceExprs, bytes: byte[]) = 
         checkNonNull "qualifyingType" qualifyingType
         checkNonNull "bytes" bytes
-        deserialize (qualifyingType, spliceTypes, spliceExprs, bytes)
+        deserialize (qualifyingType, [| |], Array.ofList spliceTypes, Array.ofList spliceExprs, bytes)
 
-    static member RegisterReflectedDefinitions(assembly:Assembly, nm, bytes) = 
+    static member Deserialize40(qualifyingType:Type, referencedTypeDefs, spliceTypes, spliceExprs, bytes: byte[]) = 
+        checkNonNull "spliceExprs" spliceExprs
+        checkNonNull "spliceTypes" spliceTypes
+        checkNonNull "referencedTypeDefs" referencedTypeDefs
+        checkNonNull "qualifyingType" qualifyingType
+        checkNonNull "bytes" bytes
+        deserialize (qualifyingType, referencedTypeDefs, spliceTypes, spliceExprs, bytes)
+
+    static member RegisterReflectedDefinitions(assembly, resourceName, bytes) = 
+        Expr.RegisterReflectedDefinitions(assembly, resourceName, bytes, [| |]) 
+
+    static member RegisterReflectedDefinitions(assembly, resourceName, bytes, referencedTypeDefs) = 
         checkNonNull "assembly" assembly
-        registerReflectedDefinitions(assembly, nm, bytes)
+        registerReflectedDefinitions(assembly, resourceName, bytes, referencedTypeDefs)
 
     static member GlobalVar<'T>(name) : Expr<'T> = 
         checkNonNull "name" name
@@ -1957,7 +2054,7 @@ module DerivedPatterns =
     [<CompiledName("UInt64Pattern")>]
     let (|UInt64|_|)        = function ValueObj(:? uint64 as v) -> Some(v) | _ -> None
     [<CompiledName("UnitPattern")>]
-    let (|Unit|_|)          = function Comb0(ValueOp(_,ty)) when ty = typeof<unit> -> Some() | _ -> None
+    let (|Unit|_|)          = function Comb0(ValueOp(_,ty,None)) when ty = typeof<unit> -> Some() | _ -> None
 
     /// (fun (x,y) -> z) is represented as 'fun p -> let x = p#0 let y = p#1' etc.
     /// This reverses this encoding.
@@ -2097,8 +2194,10 @@ module ExprShape =
             | WhileLoopOp,[e1;e2]     -> mkWhileLoop(e1,e2)
             | TryFinallyOp,[e1;e2]     -> mkTryFinally(e1,e2)
             | TryWithOp,[e1;Lambda(v1,e2);Lambda(v2,e3)]     -> mkTryWith(e1,v1,e2,v2,e3)
-            | QuoteOp,[e1]     -> mkQuote(e1)
-            | ValueOp(v,ty),[]  -> mkValue(v,ty)
+            | QuoteOp flg,[e1]     -> mkQuote(e1,flg)
+            | ValueOp(v,ty,None),[]  -> mkValue(v,ty)
+            | ValueOp(v,ty,Some nm),[]  -> mkValueWithName(v,ty,nm)
+            | WithValueOp(v,ty),[e]  -> mkValueWithDefn(v,ty,e)
             | _ -> raise <| System.InvalidOperationException (SR.GetString(SR.QillFormedAppOrLet))          
 
 

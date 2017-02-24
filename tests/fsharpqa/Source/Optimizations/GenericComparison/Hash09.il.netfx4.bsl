@@ -1,5 +1,5 @@
 
-//  Microsoft (R) .NET Framework IL Disassembler.  Version 4.0.30319.17376
+//  Microsoft (R) .NET Framework IL Disassembler.  Version 4.6.1055.0
 //  Copyright (c) Microsoft Corporation.  All rights reserved.
 
 
@@ -13,7 +13,7 @@
 .assembly extern FSharp.Core
 {
   .publickeytoken = (B0 3F 5F 7F 11 D5 0A 3A )                         // .?_....:
-  .ver 4:3:0:0
+  .ver 4:4:1:0
 }
 .assembly Hash09
 {
@@ -22,27 +22,27 @@
                                                                                                       int32) = ( 01 00 02 00 00 00 00 00 00 00 00 00 00 00 00 00 ) 
 
   // --- The following custom attribute is added automatically, do not uncomment -------
-  //  .custom instance void [mscorlib]System.Diagnostics.DebuggableAttribute::.ctor(valuetype [mscorlib]System.Diagnostics.DebuggableAttribute/DebuggingModes) = ( 01 00 03 00 00 00 00 00 ) 
+  //  .custom instance void [mscorlib]System.Diagnostics.DebuggableAttribute::.ctor(valuetype [mscorlib]System.Diagnostics.DebuggableAttribute/DebuggingModes) = ( 01 00 02 00 00 00 00 00 ) 
 
   .hash algorithm 0x00008004
   .ver 0:0:0:0
 }
 .mresource public FSharpSignatureData.Hash09
 {
-  // Offset: 0x00000000 Length: 0x000008AA
+  // Offset: 0x00000000 Length: 0x0000088E
 }
 .mresource public FSharpOptimizationData.Hash09
 {
-  // Offset: 0x000008B0 Length: 0x00000698
+  // Offset: 0x00000898 Length: 0x00000686
 }
 .module Hash09.dll
-// MVID: {4F20E46D-9642-77DB-A745-03836DE4204F}
+// MVID: {5772F67B-9642-77DB-A745-03837BF67257}
 .imagebase 0x00400000
 .file alignment 0x00000200
 .stackreserve 0x00100000
 .subsystem 0x0003       // WINDOWS_CUI
 .corflags 0x00000001    //  ILONLY
-// Image base: 0x0000009A2B400000
+// Image base: 0x00F80000
 
 
 // =============== CLASS MEMBERS DECLARATION ===================
@@ -55,7 +55,7 @@
          extends [mscorlib]System.Object
   {
     .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 07 00 00 00 00 00 ) 
-    .class auto autochar serializable nested public beforefieldinit GenericKey`1<a>
+    .class auto autochar serializable sealed nested public beforefieldinit GenericKey`1<a>
            extends [mscorlib]System.Object
            implements class [mscorlib]System.IEquatable`1<class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a>>,
                       [mscorlib]System.Collections.IStructuralEquatable,
@@ -160,6 +160,20 @@
         IL_0015:  ret
       } // end of method GenericKey`1::__DebugDisplay
 
+      .method public strict virtual instance string 
+                ToString() cil managed
+      {
+        .custom instance void [mscorlib]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor() = ( 01 00 00 00 ) 
+        // Code size       22 (0x16)
+        .maxstack  8
+        IL_0000:  ldstr      "%+A"
+        IL_0005:  newobj     instance void class [FSharp.Core]Microsoft.FSharp.Core.PrintfFormat`5<class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a>,string>,class [FSharp.Core]Microsoft.FSharp.Core.Unit,string,string,class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a>>::.ctor(string)
+        IL_000a:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.ExtraTopLevelOperators::PrintFormatToString<class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a>,string>>(class [FSharp.Core]Microsoft.FSharp.Core.PrintfFormat`4<!!0,class [FSharp.Core]Microsoft.FSharp.Core.Unit,string,string>)
+        IL_000f:  ldarg.0
+        IL_0010:  callvirt   instance !1 class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a>,string>::Invoke(!0)
+        IL_0015:  ret
+      } // end of method GenericKey`1::ToString
+
       .method public hidebysig virtual final 
               instance int32  CompareTo(class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a> obj) cil managed
       {
@@ -257,7 +271,7 @@
         // Code size       16 (0x10)
         .maxstack  8
         .language '{AB4F38C9-B6E6-43BA-BE3B-58080B2CCCE3}', '{994B45C4-E6E9-11D2-903F-00C04FA302A1}', '{5A869D0B-6611-11D3-BD2A-0000F80849BD}'
-        .line 4,4 : 10,20 
+        .line 4,4 : 10,20 'C:\\GitHub\\dsyme\\visualfsharp\\tests\\fsharpqa\\Source\\Optimizations\\GenericComparison\\Hash09.fsx'
         IL_0000:  nop
         IL_0001:  ldarg.0
         IL_0002:  ldarg.1
@@ -280,7 +294,7 @@
                  [3] int32 V_3,
                  [4] !a V_4,
                  [5] !a V_5)
-        .line 4,4 : 10,20 
+        .line 4,4 : 10,20
         IL_0000:  nop
         IL_0001:  ldarg.1
         IL_0002:  unbox.any  class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!a>
@@ -432,7 +446,7 @@
         .custom instance void [mscorlib]System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor() = ( 01 00 00 00 ) 
         // Code size       13 (0xd)
         .maxstack  8
-        .line 4,4 : 10,20 
+        .line 4,4 : 10,20
         IL_0000:  nop
         IL_0001:  ldarg.0
         IL_0002:  call       class [mscorlib]System.Collections.IEqualityComparer [FSharp.Core]Microsoft.FSharp.Core.LanguagePrimitives::get_GenericEqualityComparer()
@@ -636,13 +650,13 @@
       .maxstack  4
       .locals init ([0] int32 i,
                [1] int32 V_1)
-      .line 7,7 : 8,32 
+      .line 7,7 : 8,32
       IL_0000:  nop
       IL_0001:  ldc.i4.0
       IL_0002:  stloc.0
       IL_0003:  br.s       IL_001b
 
-      .line 8,8 : 12,44 
+      .line 8,8 : 12,44
       IL_0005:  ldc.i4.1
       IL_0006:  ldc.i4.2
       IL_0007:  call       class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<!0> class Hash09/HashMicroPerfAndCodeGenerationTests/GenericKey`1<int32>::NewGenericKey(!0,
@@ -654,7 +668,7 @@
       IL_0018:  ldc.i4.1
       IL_0019:  add
       IL_001a:  stloc.0
-      .line 7,7 : 21,29 
+      .line 7,7 : 8,32 ''
       IL_001b:  ldloc.0
       IL_001c:  ldc.i4     0x989681
       IL_0021:  blt.s      IL_0005

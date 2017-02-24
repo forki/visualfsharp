@@ -1,3 +1,7 @@
+#if NETSTANDARD1_6
+open CoreClrUtilities
+#endif
+
 #light
 let x1 = 1
 let x2 = "hello"

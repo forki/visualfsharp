@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 // Various tests for the:
 // Microsoft.FSharp.Collections.Array module
@@ -939,7 +939,8 @@ type ArrayModule2() =
         CheckThrowsArgumentNullException(fun() -> Array.truncate 1 null |> ignore)
 
         // negative count
-        CheckThrowsArgumentException(fun() -> Array.truncate -1 [|1..5|] |> ignore)
+        Assert.AreEqual([| |], Array.truncate -1 [|1..5|])
+        Assert.AreEqual([| |], Array.truncate System.Int32.MinValue [|1..5|])
 
         ()
 

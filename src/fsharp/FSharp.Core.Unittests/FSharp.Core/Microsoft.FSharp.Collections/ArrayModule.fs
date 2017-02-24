@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 // Various tests for the:
 // Microsoft.FSharp.Collections.Array module
@@ -21,13 +21,6 @@ Make sure each method works on:
 [<TestFixture>]
 type ArrayModule() =
 
-    let rec IsNaN (x : obj) =
-        match x with
-        | :? float   as x -> Double.IsNaN(x)
-        | :? float32 as x -> Single.IsNaN(x)
-        | :? decimal as x -> Decimal.ToDouble(x) |> box |> IsNaN
-        | _ -> failwith "Invalid input. Please provide a numeric type which could possibly be NaN"
-
     [<Test>]
     member this.Empty() =
         let emptyArray = Array.empty
@@ -40,6 +33,34 @@ type ArrayModule() =
         Assert.IsTrue( (d = [| |]) )
         ()
 
+
+    [<Test>]
+    member this.AllPairs() =
+        // integer array
+        let resultInt =  Array.allPairs [|1..3|] [|2..2..6|]
+        if resultInt <> [|(1,2);(1,4);(1,6)
+                          (2,2);(2,4);(2,6)
+                          (3,2);(3,4);(3,6)|] then Assert.Fail()
+
+        // string array
+        let resultStr = Array.allPairs [|"A"; "B"; "C" ; "D" |] [|"a";"b";"c";"d"|]
+        if resultStr <> [|("A","a");("A","b");("A","c");("A","d")
+                          ("B","a");("B","b");("B","c");("B","d")
+                          ("C","a");("C","b");("C","c");("C","d")
+                          ("D","a");("D","b");("D","c");("D","d")|] then Assert.Fail()
+
+        // empty array
+        if Array.allPairs [||]     [||] <> [||]  then Assert.Fail()
+        if Array.allPairs [|1..3|] [||] <> [||]  then Assert.Fail()
+        if Array.allPairs [||] [|1..3|] <> [||]  then Assert.Fail()
+
+        // null array
+        let nullArr = null:string[]
+        CheckThrowsArgumentNullException (fun () -> Array.allPairs nullArr nullArr  |> ignore)
+        CheckThrowsArgumentNullException (fun () -> Array.allPairs [||]    nullArr  |> ignore)
+        CheckThrowsArgumentNullException (fun () -> Array.allPairs nullArr [||]     |> ignore)
+
+        ()
 
     [<Test>]
     member this.Append() =
@@ -145,6 +166,59 @@ type ArrayModule() =
         ()
 
     [<Test>]
+    member this.ChunkBySize() =
+
+        // int Seq
+        Assert.IsTrue([| [|1..4|]; [|5..8|] |] = Array.chunkBySize 4 [|1..8|])
+        Assert.IsTrue([| [|1..4|]; [|5..8|]; [|9..10|] |] = Array.chunkBySize 4 [|1..10|])
+        Assert.IsTrue([| [|1|]; [|2|]; [|3|]; [|4|] |] = Array.chunkBySize 1 [|1..4|])
+        Assert.IsTrue([| [|1..3|]; [|4|] |] = Array.chunkBySize 3 [|1..4|])
+        Assert.IsTrue([| [|1..5|]; [|6..10|]; [|11..12|] |] = Array.chunkBySize 5 [|1..12|])
+
+        // string Seq
+        Assert.IsTrue([| [|"a"; "b"|]; [|"c";"d"|]; [|"e"|] |] = Array.chunkBySize 2 [|"a";"b";"c";"d";"e"|])
+
+        // empty Seq
+        Assert.IsTrue([||] = Array.chunkBySize 3 [||])
+
+        // null Seq
+        let nullArr:_[] = null
+        CheckThrowsArgumentNullException (fun () -> Array.chunkBySize 3 nullArr |> ignore)
+
+        // invalidArg
+        CheckThrowsArgumentException (fun () -> Array.chunkBySize 0 [|1..10|] |> ignore)
+        CheckThrowsArgumentException (fun () -> Array.chunkBySize -1 [|1..10|] |> ignore)
+
+        ()
+
+    [<Test>]
+    member this.SplitInto() =
+
+        // int array
+        Assert.IsTrue([| [|1..4|]; [|5..7|]; [|8..10|] |] = Array.splitInto 3 [|1..10|])
+        Assert.IsTrue([| [|1..4|]; [|5..8|]; [|9..11|] |] = Array.splitInto 3 [|1..11|])
+        Assert.IsTrue([| [|1..4|]; [|5..8|]; [|9..12|] |] = Array.splitInto 3 [|1..12|])
+
+        Assert.IsTrue([| [|1..2|]; [|3|]; [|4|]; [|5|] |] = Array.splitInto 4 [|1..5|])
+        Assert.IsTrue([| [|1|]; [|2|]; [|3|]; [|4|] |] = Array.splitInto 20 [|1..4|])
+
+        // string array
+        Assert.IsTrue([| [|"a"; "b"|]; [|"c";"d"|]; [|"e"|] |] = Array.splitInto 3 [|"a";"b";"c";"d";"e"|])
+
+        // empty array
+        Assert.IsTrue([| |] = Array.splitInto 3 [| |])
+
+        // null array
+        let nullArr:_[] = null
+        CheckThrowsArgumentNullException (fun () -> Array.splitInto 3 nullArr |> ignore)
+
+        // invalidArg
+        CheckThrowsArgumentException (fun () -> Array.splitInto 0 [|1..10|] |> ignore)
+        CheckThrowsArgumentException (fun () -> Array.splitInto -1 [|1..10|] |> ignore)
+
+        ()
+
+    [<Test>]
     member this.distinct() =
         // distinct should work on empty array
         Assert.AreEqual([||], Array.distinct [||])
@@ -185,7 +259,39 @@ type ArrayModule() =
         Assert.AreEqual([|null|], Array.distinctBy id [|null|])
         let list = new System.Collections.Generic.List<int>()
         Assert.AreEqual([|null, list|], Array.distinctBy id [|null, list|])
-        
+
+    [<Test>]
+    member this.Except() =
+        // integer array
+        let intArr1 = [| yield! {1..100}
+                         yield! {1..100} |]
+        let intArr2 = [| 1 .. 10 |]
+        let expectedIntArr = [| 11 .. 100 |]
+
+        Assert.AreEqual(expectedIntArr, Array.except intArr2 intArr1)
+
+        // string array
+        let strArr1 = [| "a"; "b"; "c"; "d"; "a" |]
+        let strArr2 = [| "b"; "c" |]
+        let expectedStrArr = [| "a"; "d" |]
+
+        Assert.AreEqual(expectedStrArr, Array.except strArr2 strArr1)
+
+        // empty array
+        let emptyIntArr = [| |]
+        Assert.AreEqual([|1..100|], Array.except emptyIntArr intArr1)
+        Assert.AreEqual(emptyIntArr, Array.except intArr1 emptyIntArr)
+        Assert.AreEqual(emptyIntArr, Array.except emptyIntArr emptyIntArr)
+        Assert.AreEqual(emptyIntArr, Array.except intArr1 intArr1)
+
+        // null array
+        let nullArr : int [] = null
+        CheckThrowsArgumentNullException(fun () -> Array.except nullArr emptyIntArr |> ignore)
+        CheckThrowsArgumentNullException(fun () -> Array.except emptyIntArr nullArr |> ignore)
+        CheckThrowsArgumentNullException(fun () -> Array.except nullArr nullArr |> ignore)
+
+        ()
+
     [<Test>]
     member this.Take() =
         Assert.AreEqual([||],Array.take 0 [||])
@@ -287,7 +393,7 @@ type ArrayModule() =
         if intChoosed.[1] <> 10 then Assert.Fail()
         
         // string array
-        let stringSrc: string [] = "Lists are a commonly used data structure. They are not mutable, i.e., you can't delete an element of a list – instead you create a new list with the element deleted. List values often share storage under the hood, i.e., a list value only allocate more memory when you actually execute construction operations.".Split([|' '|], System.StringSplitOptions.RemoveEmptyEntries)
+        let stringSrc: string [] = "Lists are a commonly used data structure. They are not mutable, i.e., you can't delete an element of a list Â– instead you create a new list with the element deleted. List values often share storage under the hood, i.e., a list value only allocate more memory when you actually execute construction operations.".Split([|' '|], System.StringSplitOptions.RemoveEmptyEntries)
         let funcString x = match x with
                            | "list"-> Some x
                            | "List" -> Some x
@@ -310,8 +416,7 @@ type ArrayModule() =
     member this.Choose() = 
         this.ChooseTester Array.choose Array.choose
 
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
     [<Test>]
     member this.``Parallel.Choose`` () = 
         this.ChooseTester Array.Parallel.choose Array.Parallel.choose
@@ -358,8 +463,7 @@ type ArrayModule() =
         Array.collect f [|1;2;3|] |> ignore
         Assert.AreEqual(3,!stamp)
         
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
     [<Test>]
     member this.``Parallel.Collect`` () =
         this.CollectTester Array.Parallel.collect Array.Parallel.collect
@@ -425,7 +529,7 @@ type ArrayModule() =
     [<Test>]
     member this.countBy() =
         // countBy should work on empty array
-        Assert.AreEqual([||], Array.countBy (fun _ -> failwith "should not be executed") [||])
+        Assert.AreEqual(0,Array.countBy (fun _ -> failwith "should not be executed") [||] |> Array.length)
 
         // countBy should not work on null
         CheckThrowsArgumentNullException(fun () -> Array.countBy (fun _ -> failwith "should not be executed") null |> ignore)
@@ -611,7 +715,64 @@ type ArrayModule() =
         let nullArr = null:string[] 
         CheckThrowsArgumentNullException (fun () ->  Array.filter funcStr nullArr |> ignore) 
         
-        ()   
+        ()
+        
+    [<Test>]
+    member this.Filter2 () =
+        // The Array.filter algorith uses a bitmask as a temporary storage mechanism
+        // for which elements to filter. This introduces some possible error conditions
+        // around how the filter is filled and subsequently used, so filter test
+        // does a pretty exhaustive test suite.
+        // It works by first generating arrays which consist of sequences of unique
+        // positive and negative numbers, as per arguments, it then filters for the
+        // positive values, and then compares the results agains the original array.
+
+        let makeTestArray size posLength negLength startWithPos startFromEnd =
+            let array = Array.zeroCreate size
+
+            let mutable sign  = if startWithPos then 1         else -1
+            let mutable count = if startWithPos then posLength else negLength
+            for i = 1 to size do
+                let idx = if startFromEnd then size-i else i-1
+                array.[idx] <- (idx+1) * sign
+                count <- count - 1
+                if count <= 0 then
+                    sign <- sign * -1
+                    count <- if sign > 0 then posLength else negLength
+
+            array
+
+        let checkFilter filter (array:array<_>) =
+            let filtered = array |> filter (fun n -> n > 0)
+
+            let mutable idx = 0
+            for item in filtered do
+                while array.[idx] < item do
+                    idx <- idx + 1
+                if item <> array.[idx] then
+                    Assert.Fail ()
+            idx <- idx + 1
+            while idx < array.Length do
+                if array.[idx] > 0 then
+                    Assert.Fail ()
+                idx <- idx + 1
+
+        let checkCombinations filter maxSize =
+            for size = 0 to maxSize do
+                for posLength = 1 to size do
+                    for negLength = 1 to size do
+                        for startWithPos in [true; false] do
+                            for startFromEnd in [true; false] do
+                                let testArray = makeTestArray size posLength negLength startWithPos startFromEnd
+                                checkFilter filter testArray
+
+        // this could probably be a bit smaller, but needs to at least be > 64 to test chunk copying
+        // of data, and > 96 gives a safer feel, so settle on a nice decimal rounding of one hundred
+        // to appease those with digits.
+        let suitableTestMaxLength = 100 
+
+        checkCombinations Array.filter suitableTestMaxLength
+
 
 
     [<Test>]
@@ -1118,8 +1279,7 @@ type ArrayModule() =
         Array.init 10 f |> ignore
         Assert.AreEqual (10, !stamp)
         
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
     [<Test>]
     member this.``Parallel.Init``() = 
         this.InitTester Array.Parallel.init Array.Parallel.init
@@ -1331,8 +1491,7 @@ type ArrayModule() =
         Array.map f [| 1..100 |] |> ignore
         Assert.AreEqual(100,!stamp)
         
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
     [<Test>]
     member this.``Parallel.Map`` () =
         this.MapTester Array.Parallel.map Array.Parallel.map
@@ -1374,8 +1533,7 @@ type ArrayModule() =
         Assert.AreEqual(100,!stamp)
         ()
         
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
     [<Test>]
     member this.``Parallel.Mapi`` () =
         this.MapiTester Array.Parallel.mapi Array.Parallel.mapi
@@ -1490,8 +1648,7 @@ type ArrayModule() =
         Assert.AreEqual([|[]|], Array.singleton [])
         Assert.IsTrue([|[||]|] = Array.singleton [||])
 
-#if FX_NO_TPL_PARALLEL
-#else
+#if !FX_NO_TPL_PARALLEL
     [<Test>]
     member this.``Parallel.Partition`` () =
         this.PartitionTester Array.Parallel.partition Array.Parallel.partition    

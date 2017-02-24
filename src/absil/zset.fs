@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Compiler.AbstractIL.Internal
 
@@ -22,7 +22,6 @@ module internal Zset =
     let contains x (s:Zset<_>) = s.Contains(x)
     let add x (s:Zset<_>) = s.Add(x)
     let addList xs a = List.fold (fun a x -> add x a) a xs
-    let addFlatList xs a = FlatList.fold (fun a x -> add x a) a xs
         
     let singleton ord x = add x (empty ord)
     let remove x (s:Zset<_>) = s.Remove(x)

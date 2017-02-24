@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Collections
 
@@ -11,6 +11,13 @@ namespace Microsoft.FSharp.Collections
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     [<RequireQualifiedAccess>]
     module List = 
+
+        /// <summary>Returns a new list that contains the cartesian product of the two input lists.</summary>
+        /// <param name="list1">The first input list.</param>
+        /// <param name="list2">The second input list.</param>
+        /// <returns>The resulting list of pairs.</returns>
+        [<CompiledName("AllPairs")>]
+        val allPairs: list1:'T1 list -> list2:'T2 list -> ('T1 * 'T2) list
 
         /// <summary>Returns a new list that contains the elements of the first list
         /// followed by elements of the second.</summary>
@@ -54,6 +61,14 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Choose")>]
         val choose: chooser:('T -> 'U option) -> list:'T list -> 'U list
 
+        /// <summary>Divides the input list into chunks of size at most <c>chunkSize</c>.</summary>
+        /// <param name="chunkSize">The maximum size of each chunk.</param>
+        /// <param name="list">The input list.</param>
+        /// <returns>The list divided into chunks.</returns>
+        /// <exception cref="System.ArgumentException">Thrown when <c>chunkSize</c> is not positive.</exception>
+        [<CompiledName("ChunkBySize")>]
+        val chunkBySize: chunkSize:int -> list:'T list -> 'T list list
+
         /// <summary>For each element of the list, applies the given function. Concatenates all the results and return the combined list.</summary>
         /// <param name="mapping">The function to transform each input element into a sublist to be concatenated.</param>
         /// <param name="list">The input list.</param>
@@ -61,17 +76,18 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Collect")>]
         val collect: mapping:('T -> 'U list) -> list:'T list -> 'U list
 
-        /// <summary>Compares two lists using the given comparison function, element by element.
-        /// Returns the first non-zero result from the comparison function.  If the end of a list
-        /// is reached it returns a -1 if the first list is shorter and a 1 if the second list
-        /// is shorter.</summary>
+        /// <summary>Compares two lists using the given comparison function, element by element.</summary>
         ///
         /// <param name="comparer">A function that takes an element from each list and returns an int.
         /// If it evaluates to a non-zero value iteration is stopped and that value is returned.</param>
         /// <param name="list1">The first input list.</param>
         /// <param name="list2">The second input list.</param>
         ///
-        /// <returns>The first non-zero value from the comparison function.</returns>
+        /// <returns>Returns the first non-zero result from the comparison function. If the first list has a 
+        /// larger element, the return value is always positive. If the second list has a larger 
+        /// element, the return value is always negative. When the elements are equal in the two 
+        /// lists, 1 is returned if the first list is longer, 0 is returned if they are equal in 
+        /// length, and -1 is returned when the second list is longer.</returns>
         [<CompiledName("CompareWith")>]
         val inline compareWith: comparer:('T -> 'T -> int) -> list1:'T list -> list2:'T list -> int
 
@@ -120,10 +136,31 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("CountBy")>]
         val countBy : projection:('T -> 'Key) -> list:'T list -> ('Key * int) list when 'Key : equality
 
+        /// <summary>Splits the input list into at most <c>count</c> chunks.</summary>
+        /// <param name="count">The maximum number of chunks.</param>
+        /// <param name="list">The input list.</param>
+        /// <returns>The list split into chunks.</returns>
+        /// <exception cref="System.ArgumentException">Thrown when <c>count</c> is not positive.</exception>
+        [<CompiledName("SplitInto")>]
+        val splitInto: count:int -> list:'T list -> 'T list list
+
         /// <summary>Returns an empty list of the given type.</summary>
         [<GeneralizableValue>]
         [<CompiledName("Empty")>]
         val empty<'T> : 'T list
+
+        /// <summary>Returns a new list with the distinct elements of the input list which do not appear in the itemsToExclude sequence,
+        /// using generic hash and equality comparisons to compare values.</summary>
+        ///
+        /// <param name="itemsToExclude">A sequence whose elements that also occur in the input list will cause those elements to be
+        /// removed from the result.</param>
+        /// <param name="list">A list whose elements that are not also in itemsToExclude will be returned.</param>
+        ///
+        /// <returns>A list that contains the distinct elements of <c>list</c> that do not appear in <c>itemsToExclude</c>.</returns>
+        ///
+        /// <exception cref="System.ArgumentNullException">Thrown when itemsToExclude is null.</exception>
+        [<CompiledName("Except")>]
+        val except: itemsToExclude:seq<'T> -> list:'T list -> 'T list when 'T : equality
 
         /// <summary>Returns the only element of the list.</summary>
         ///
@@ -161,7 +198,7 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Exists2")>]
         val exists2: predicate:('T1 -> 'T2 -> bool) -> list1:'T1 list -> list2:'T2 list -> bool
 
-        /// <summary>Returns the first element for which the given function returns <c>true</c>.
+        /// <summary>Returns the first element for which the given function returns True.
         /// Raises <c>KeyNotFoundException</c> if no such element exists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="list">The input list.</param>
@@ -171,7 +208,7 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Find")>]
         val find: predicate:('T -> bool) -> list:'T list -> 'T
 
-        /// <summary>Returns the last element for which the given function returns <c>true</c>.
+        /// <summary>Returns the last element for which the given function returns True.
         /// Raises <c>KeyNotFoundException</c> if no such element exists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="list">The input list.</param>
@@ -512,7 +549,7 @@ namespace Microsoft.FSharp.Collections
         val pairwise: list:'T list -> ('T * 'T) list
 
         /// <summary>Splits the collection into two collections, containing the 
-        /// elements for which the given predicate returns <c>true</c> and <c>false</c>
+        /// elements for which the given predicate returns True and False
         /// respectively. Element order is preserved in both of the created lists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="list">The input list.</param>
@@ -614,7 +651,7 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("Skip")>]
         val skip: count:int -> list: 'T list -> 'T list
 
-        /// <summary>Bypasses elements in a list while the given predicate returns <c>true</c>, and then returns
+        /// <summary>Bypasses elements in a list while the given predicate returns True, and then returns
         /// the remaining elements of the list.</summary>
         /// <param name="predicate">A function that evaluates an element of the list to a boolean value.</param>
         /// <param name="list">The input list.</param>
@@ -717,7 +754,7 @@ namespace Microsoft.FSharp.Collections
         val take: count:int -> list:'T list -> 'T list
 
         /// <summary>Returns a list that contains all elements of the original list while the 
-        /// given predicate returns <c>true</c>, and then returns no further elements.</summary>
+        /// given predicate returns True, and then returns no further elements.</summary>
         ///
         /// <param name="predicate">A function that evaluates to false when no more items should be returned.</param>
         /// <param name="list">The input list.</param>
@@ -749,7 +786,6 @@ namespace Microsoft.FSharp.Collections
         /// <param name="count">The maximum number of items to return.</param>
         /// <param name="array">The input list.</param>
         /// <returns>The result list.</returns>
-        /// <exception cref="System.ArgumentException">Thrown when the count is negative.</exception>
         [<CompiledName("Truncate")>]
         val truncate: count:int -> list:'T list -> 'T list
 
@@ -762,8 +798,8 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("TryPick")>]
         val tryPick: chooser:('T -> 'U option) -> list:'T list -> 'U option
 
-        /// <summary>Returns the first element for which the given function returns <c>true.</c>.
-        /// Return <c>None</c> if no such element exists.</summary>
+        /// <summary>Returns the first element for which the given function returns True.
+        /// Return None if no such element exists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="list">The input list.</param>
         /// <returns>The first element for which the predicate returns true, or None if
@@ -771,8 +807,8 @@ namespace Microsoft.FSharp.Collections
         [<CompiledName("TryFind")>]
         val tryFind: predicate:('T -> bool) -> list:'T list -> 'T option
 
-        /// <summary>Returns the last element for which the given function returns <c>true.</c>.
-        /// Return <c>None</c> if no such element exists.</summary>
+        /// <summary>Returns the last element for which the given function returns True.
+        /// Return None if no such element exists.</summary>
         /// <param name="predicate">The function to test the input elements.</param>
         /// <param name="list">The input list.</param>
         /// <returns>The last element for which the predicate returns true, or None if
@@ -838,13 +874,13 @@ namespace Microsoft.FSharp.Collections
         val where: predicate:('T -> bool) -> list:'T list -> 'T list
 
         /// <summary>Returns a list of sliding windows containing elements drawn from the input
-        /// list. Each window is returned as a fresh array.</summary>
+        /// list. Each window is returned as a fresh list.</summary>
         /// <param name="windowSize">The number of elements in each window.</param>
         /// <param name="list">The input list.</param>
         /// <returns>The result list.</returns>
         /// <exception cref="System.ArgumentException">Thrown when windowSize is not positive.</exception>
         [<CompiledName("Windowed")>]
-        val windowed : windowSize:int -> list:'T list -> 'T[] list
+        val windowed : windowSize:int -> list:'T list -> 'T list list
 
         /// <summary>Combines the two lists into a list of pairs. The two lists must have equal lengths.</summary>
         /// <param name="list1">The first input list.</param>

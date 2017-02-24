@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 #nowarn "25" // Incomplete match expressions 
 #nowarn "35" // This construct is deprecated: the treatment of this operator is now handled directly by the F# compiler and its meaning may not be redefined.
@@ -17,6 +17,7 @@ namespace Microsoft.FSharp.Core
     open System.Collections.Generic
     open System.Diagnostics
     open System.Globalization
+    open System.Reflection
     open System.Text
     
 
@@ -206,10 +207,12 @@ namespace Microsoft.FSharp.Core
     type NoComparisonAttribute() = 
         inherit System.Attribute()
 
-    [<AttributeUsage (AttributeTargets.Class ||| AttributeTargets.Method ||| AttributeTargets.Property ||| AttributeTargets.Constructor,AllowMultiple=false)>]  
+    [<AttributeUsage (AttributeTargets.Class ||| AttributeTargets.Parameter ||| AttributeTargets.Method ||| AttributeTargets.Property ||| AttributeTargets.Constructor,AllowMultiple=false)>]  
     [<Sealed>]
-    type ReflectedDefinitionAttribute() =
+    type ReflectedDefinitionAttribute(includeValue: bool) =
         inherit System.Attribute()
+        new() = ReflectedDefinitionAttribute(false)
+        member x.IncludeValue = includeValue
 
     [<AttributeUsage (AttributeTargets.Method ||| AttributeTargets.Class ||| AttributeTargets.Field ||| AttributeTargets.Interface ||| AttributeTargets.Struct ||| AttributeTargets.Delegate ||| AttributeTargets.Enum ||| AttributeTargets.Property,AllowMultiple=false)>]  
     [<Sealed>]
@@ -259,13 +262,19 @@ namespace Microsoft.FSharp.Core
     [<Sealed>]
     type CompilationMappingAttribute(sourceConstructFlags:SourceConstructFlags,
                                      variantNumber:int,
-                                     sequenceNumber:int)  =
+                                     sequenceNumber:int,
+                                     resourceName:string,
+                                     typeDefinitions:System.Type[])  =
         inherit System.Attribute()
         member x.SourceConstructFlags = sourceConstructFlags
         member x.SequenceNumber = sequenceNumber
         member x.VariantNumber = variantNumber
         new(sourceConstructFlags) = CompilationMappingAttribute(sourceConstructFlags,0,0)
         new(sourceConstructFlags,sequenceNumber) = CompilationMappingAttribute(sourceConstructFlags,0,sequenceNumber)
+        new(sourceConstructFlags,variantNumber,sequenceNumber) = CompilationMappingAttribute(sourceConstructFlags,variantNumber,sequenceNumber,null,null)
+        new(resourceName, typeDefinitions) = CompilationMappingAttribute(SourceConstructFlags.None,0,0,resourceName, typeDefinitions)
+        member x.TypeDefinitions = typeDefinitions
+        member x.ResourceName = resourceName
 
     [<AttributeUsage(AttributeTargets.All,AllowMultiple=false)>]
     [<Sealed>]
@@ -336,7 +345,6 @@ namespace Microsoft.FSharp.Core
         member x.MessageNumber = messageNumber
         member x.IsError with get() = isError and set v = isError <- v
         member x.IsHidden with get() = isHidden and set v = isHidden <- v
-        new (message, messageNumber) = CompilerMessageAttribute(message, messageNumber)
 
     [<AttributeUsage(AttributeTargets.Method ||| AttributeTargets.Property,AllowMultiple=false)>]
     [<Sealed>]
@@ -394,7 +402,9 @@ namespace Microsoft.FSharp.Core
         type System.Type with
             member inline this.IsGenericType = this.GetTypeInfo().IsGenericType
             member inline this.IsValueType = this.GetTypeInfo().IsValueType
+            member inline this.IsSealed = this.GetTypeInfo().IsSealed
             member inline this.IsAssignableFrom(otherTy : Type) = this.GetTypeInfo().IsAssignableFrom(otherTy.GetTypeInfo())
+            member inline this.GetGenericArguments() = this.GetTypeInfo().GenericTypeArguments
             member inline this.GetProperty(name) = this.GetRuntimeProperty(name)
             member inline this.GetMethod(name, parameterTypes) = this.GetRuntimeMethod(name, parameterTypes)
             member inline this.GetCustomAttributes(attrTy : Type, inherits : bool) : obj[] = 
@@ -404,8 +414,7 @@ namespace Microsoft.FSharp.Core
 
 #endif
 
-
-    module BasicInlinedOperations =  
+    module internal BasicInlinedOperations =  
         let inline unboxPrim<'T>(x:obj) = (# "unbox.any !0" type ('T) x : 'T #)
         let inline box     (x:'T) = (# "box !0" type ('T) x : obj #)
         let inline not     (b:bool) = (# "ceq" b false : bool #)
@@ -468,6 +477,7 @@ namespace Microsoft.FSharp.Core
         let inline isinstPrim<'T>(x:obj) = (# "isinst !0" type ('T) x : obj #)
         let inline castclassPrim<'T>(x:obj) = (# "castclass !0" type ('T) x : 'T #)
         let inline notnullPrim<'T when 'T : not struct>(x:'T) = (# "ldnull cgt.un" x : bool #)
+
         let inline iscastPrim<'T when 'T : not struct>(x:obj) = (# "isinst !0" type ('T) x : 'T #)
 
 
@@ -522,8 +532,7 @@ namespace System
 #if TUPLE_STRUXT
     // NOTE: Tuple`2 is a struct type. 
     // WARNING: If you change additional tuple types to be structs then you must change 'highestTupleStructType' in tastops.ml
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2})")>]
 #endif
     [<Struct>]
@@ -540,8 +549,7 @@ namespace System
         interface IComparable 
 #endif
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2},{Item3})")>]
 #endif
     type Tuple<'T1,'T2,'T3>(t1:'T1,t2:'T2,t3:'T3) =       
@@ -552,8 +560,7 @@ namespace System
         interface IStructuralEquatable 
         interface IComparable 
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2},{Item3},{Item4})")>]
 #endif
     type Tuple<'T1,'T2,'T3,'T4>(t1:'T1,t2:'T2,t3:'T3,t4:'T4) = 
@@ -565,8 +572,7 @@ namespace System
         interface IStructuralEquatable 
         interface IComparable 
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2},{Item3},{Item4},{Item5})")>]
 #endif
     type Tuple<'T1,'T2,'T3,'T4,'T5>(t1:'T1,t2:'T2,t3:'T3,t4:'T4,t5:'T5) = 
@@ -579,8 +585,7 @@ namespace System
         interface IStructuralEquatable 
         interface IComparable 
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2},{Item3},{Item4},{Item5},{Item6})")>]
 #endif
     type Tuple<'T1,'T2,'T3,'T4,'T5,'T6>(t1:'T1,t2:'T2,t3:'T3,t4:'T4,t5:'T5,t6:'T6) = 
@@ -594,8 +599,7 @@ namespace System
         interface IStructuralEquatable 
         interface IComparable 
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2},{Item3},{Item4},{Item5},{Item6},{Item7})")>]
 #endif
     type Tuple<'T1,'T2,'T3,'T4,'T5,'T6,'T7>(t1:'T1,t2:'T2,t3:'T3,t4:'T4,t5:'T5,t6:'T6,t7:'T7) = 
@@ -610,8 +614,7 @@ namespace System
         interface IStructuralEquatable 
         interface IComparable 
             
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("({Item1},{Item2},{Item3},{Item4},{Item5},{Item6},{Item7},{Rest})")>]
 #endif
     type Tuple<'T1,'T2,'T3,'T4,'T5,'T6,'T7,'TRest>(t1:'T1,t2:'T2,t3:'T3,t4:'T4,t5:'T5,t6:'T6,t7:'T7,rest:'TRest) = 
@@ -629,7 +632,6 @@ namespace System
 #else   
 #endif
 
-
 namespace Microsoft.FSharp.Core
 
     open System
@@ -637,6 +639,7 @@ namespace Microsoft.FSharp.Core
     open System.Collections.Generic
     open System.Diagnostics
     open System.Globalization
+    open System.Linq
     open System.Text
     open Microsoft.FSharp.Core
     open Microsoft.FSharp.Core.BasicInlinedOperations
@@ -647,7 +650,6 @@ namespace Microsoft.FSharp.Core
     // code for each new datatype.
 
     module LanguagePrimitives =  
-   
 
         module (* internal *) ErrorStrings =
             // inline functions cannot call GetString, so we must make these bits public
@@ -711,32 +713,33 @@ namespace Microsoft.FSharp.Core
             // duplicated from above since we're using integers in this section
             let CompilationRepresentationFlags_PermitNull = 8
 
+            let getTypeInfo (ty:Type) =
+                if ty.IsValueType 
+                then TypeNullnessSemantics_NullNever else
+                let mappingAttrs = ty.GetCustomAttributes(typeof<CompilationMappingAttribute>, false)
+                if mappingAttrs.Length = 0 
+                then TypeNullnessSemantics_NullIsExtraValue
+                elif ty.Equals(typeof<unit>) then 
+                    TypeNullnessSemantics_NullTrueValue
+                elif typeof<Delegate>.IsAssignableFrom(ty) then 
+                    TypeNullnessSemantics_NullIsExtraValue
+                elif ty.GetCustomAttributes(typeof<AllowNullLiteralAttribute>, false).Length > 0 then
+                    TypeNullnessSemantics_NullIsExtraValue
+                else
+                    let reprAttrs = ty.GetCustomAttributes(typeof<CompilationRepresentationAttribute>, false)
+                    if reprAttrs.Length = 0 then 
+                        TypeNullnessSemantics_NullNotLiked 
+                    else
+                        let reprAttr = get reprAttrs 0
+                        let reprAttr = (# "unbox.any !0" type (CompilationRepresentationAttribute) reprAttr : CompilationRepresentationAttribute #)
+                        if (# "and" reprAttr.Flags CompilationRepresentationFlags_PermitNull : int #) = 0
+                        then TypeNullnessSemantics_NullNotLiked
+                        else TypeNullnessSemantics_NullTrueValue
+
             [<CodeAnalysis.SuppressMessage("Microsoft.Performance","CA1812:AvoidUninstantiatedInternalClasses")>]             
             type TypeInfo<'T>() = 
                // Compute an on-demand per-instantiation static field
-               static let info = 
-                   let ty = typeof<'T>
-                   if ty.IsValueType 
-                   then TypeNullnessSemantics_NullNever else
-                   let mappingAttrs = ty.GetCustomAttributes(typeof<CompilationMappingAttribute>, false)
-                   if mappingAttrs.Length = 0 
-                   then TypeNullnessSemantics_NullIsExtraValue
-                   elif ty.Equals(typeof<unit>) then 
-                       TypeNullnessSemantics_NullTrueValue
-                   elif typeof<Delegate>.IsAssignableFrom(ty) then 
-                       TypeNullnessSemantics_NullIsExtraValue
-                   elif ty.GetCustomAttributes(typeof<AllowNullLiteralAttribute>, false).Length > 0 then
-                       TypeNullnessSemantics_NullIsExtraValue
-                   else
-                       let reprAttrs = ty.GetCustomAttributes(typeof<CompilationRepresentationAttribute>, false)
-                       if reprAttrs.Length = 0 then 
-                           TypeNullnessSemantics_NullNotLiked 
-                       else
-                           let reprAttr = get reprAttrs 0
-                           let reprAttr = (# "unbox.any !0" type (CompilationRepresentationAttribute) reprAttr : CompilationRepresentationAttribute #)
-                           if (# "and" reprAttr.Flags CompilationRepresentationFlags_PermitNull : int #) = 0
-                           then TypeNullnessSemantics_NullNotLiked
-                           else TypeNullnessSemantics_NullTrueValue
+               static let info = getTypeInfo typeof<'T>
 
                // Publish the results of that compuation
                static member TypeInfo = info
@@ -855,7 +858,6 @@ namespace Microsoft.FSharp.Core
                     for j = 0 to len2 - 1 do
                         for k = 0 to len3 - 1 do
                             SetArray3D dst (src1+i) (src2+j) (src3+k) (GetArray3D src i j k)
-
 
 
             let inline GetArray4D (arr: 'T[,,,]) (n1:int) (n2:int) (n3:int) (n4:int)       = (# "ldelem.multi 4 !0" type ('T) arr n1 n2 n3 n4 : 'T #)  
@@ -1178,7 +1180,7 @@ namespace Microsoft.FSharp.Core
 
             /// The unique object for comparing values in ER mode (where "0" is returned when NaNs are compared)
             let fsComparerER = GenericComparer(false) 
-                    
+
             /// Compare two values of the same generic type, using "comp".
             //
             // "comp" is assumed to be either fsComparerPER or fsComparerER (and hence 'Compare' is implemented via 'GenericCompare').
@@ -1207,8 +1209,14 @@ namespace Microsoft.FSharp.Core
                  when 'T : uint64 = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when 'T : unativeint = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  // Note, these bail out to GenericComparisonWithComparerIntrinsic if called with NaN values, because clt and cgt and ceq all return "false" for that case.
-                 when 'T : float  = if (# "clt" x y : bool #) then (-1) else if (# "cgt" x y : bool #) then 1 else if (# "ceq" x y : bool #) then 0 else GenericComparisonWithComparerIntrinsic comp x y
-                 when 'T : float32 = if (# "clt" x y : bool #) then (-1) else if (# "cgt" x y : bool #) then 1 else if (# "ceq" x y : bool #) then 0 else GenericComparisonWithComparerIntrinsic comp x y
+                 when 'T : float  = if   (# "clt" x y : bool #) then (-1)
+                                    elif (# "cgt" x y : bool #) then (1)
+                                    elif (# "ceq" x y : bool #) then (0)
+                                    else GenericComparisonWithComparerIntrinsic comp x y
+                 when 'T : float32 = if   (# "clt" x y : bool #) then (-1)
+                                     elif (# "cgt" x y : bool #) then (1)
+                                     elif (# "ceq" x y : bool #) then (0)
+                                     else GenericComparisonWithComparerIntrinsic comp x y
                  when 'T : char   = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when 'T : string = 
                      // NOTE: we don't have to null check here because System.String.CompareOrdinal
@@ -1277,8 +1285,16 @@ namespace Microsoft.FSharp.Core
                  when 'T : uint32 = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when 'T : uint64 = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when 'T : unativeint = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
-                 when 'T : float  = if (# "clt" x y : bool #) then (-1) else (# "cgt" x y : int #)
-                 when 'T : float32 = if (# "clt" x y : bool #) then (-1) else (# "cgt" x y : int #)
+                 when 'T : float  = if   (# "clt" x y : bool #) then (-1)
+                                    elif (# "cgt" x y : bool #) then (1)
+                                    elif (# "ceq" x y : bool #) then (0)
+                                    elif (# "ceq" y y : bool #) then (-1)
+                                    else (# "ceq" x x : int #)
+                 when 'T : float32 = if   (# "clt" x y : bool #) then (-1)
+                                     elif (# "cgt" x y : bool #) then (1)
+                                     elif (# "ceq" x y : bool #) then (0)
+                                     elif (# "ceq" y y : bool #) then (-1)
+                                     else (# "ceq" x x : int #)
                  when 'T : char   = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when 'T : string = 
                      // NOTE: we don't have to null check here because System.String.CompareOrdinal
@@ -2479,10 +2495,15 @@ namespace Microsoft.FSharp.Core
             let rec parse n acc = if n < l then parse (n+1) (acc *.. 2UL +.. (match s.Chars(n) with '0' -> 0UL | '1' -> 1UL | _ -> formatError())) else acc in          
             parse p 0UL
 
+        let inline removeUnderscores (s:string) =
+            match s with
+            | null -> null
+            | s -> s.Replace("_", "")
+
         let ParseUInt32 (s:string) = 
             if System.Object.ReferenceEquals(s,null) then
                 raise( new System.ArgumentNullException("s") )
-            let s = s.Trim() 
+            let s = removeUnderscores (s.Trim())
             let l = s.Length 
             let mutable p = 0 
             let specifier = get0OXB s &p l 
@@ -2499,7 +2520,7 @@ namespace Microsoft.FSharp.Core
         let ParseInt32 (s:string) = 
             if System.Object.ReferenceEquals(s,null) then
                 raise( new System.ArgumentNullException("s") )
-            let s = s.Trim() 
+            let s = removeUnderscores (s.Trim())
             let l = s.Length 
             let mutable p = 0 
             let sign = getSign32 s &p l 
@@ -2518,7 +2539,7 @@ namespace Microsoft.FSharp.Core
         let ParseInt64 (s:string) = 
             if System.Object.ReferenceEquals(s,null) then
                 raise( new System.ArgumentNullException("s") )
-            let s = s.Trim() 
+            let s = removeUnderscores (s.Trim())
             let l = s.Length 
             let mutable p = 0 
             let sign = getSign64 s &p l 
@@ -2537,7 +2558,7 @@ namespace Microsoft.FSharp.Core
         let ParseUInt64     (s:string) : uint64 = 
             if System.Object.ReferenceEquals(s,null) then
                 raise( new System.ArgumentNullException("s") )
-            let s = s.Trim() 
+            let s = removeUnderscores (s.Trim())
             let l = s.Length 
             let mutable p = 0 
             let specifier = get0OXB s &p l 
@@ -3375,16 +3396,14 @@ namespace Microsoft.FSharp.Core
     // Refs
     //-------------------------------------------------------------------------
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("{contents}")>]
 #endif
     [<StructuralEquality; StructuralComparison>]
     [<CompiledName("FSharpRef`1")>]
     type Ref<'T> = 
         { 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
           [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
           mutable contents: 'T }
@@ -3399,8 +3418,7 @@ namespace Microsoft.FSharp.Core
     //-------------------------------------------------------------------------
 
     [<DefaultAugmentation(false)>]
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("Some({Value})")>]
 #endif
     [<CompilationRepresentation(CompilationRepresentationFlags.UseNullAsTrueValue)>]
@@ -3414,25 +3432,24 @@ namespace Microsoft.FSharp.Core
         [<CompilationRepresentation(CompilationRepresentationFlags.Instance)>]
         member x.Value = match x with Some x -> x | None -> raise (new System.InvalidOperationException("Option.Value"))
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         member x.IsNone = match x with None -> true | _ -> false
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         member x.IsSome = match x with Some _ -> true | _ -> false
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         static member None : 'T option = None
 
         static member Some(x) : 'T option = Some(x)
+
+        static member op_Implicit(x) : 'T option = Some(x)
 
         override x.ToString() = 
            // x is non-null, hence Some
@@ -3440,6 +3457,13 @@ namespace Microsoft.FSharp.Core
 
     and 'T option = Option<'T> 
 
+
+    [<StructuralEquality; StructuralComparison>]
+    [<CompiledName("FSharpResult`2")>]
+    [<Struct>]
+    type Result<'T,'TError> = 
+      | Ok of ResultValue:'T 
+      | Error of ErrorValue:'TError
 
 
 //============================================================================
@@ -3459,12 +3483,10 @@ namespace Microsoft.FSharp.Collections
     open Microsoft.FSharp.Core.BasicInlinedOperations
 
     [<DefaultAugmentation(false)>]
-#if FX_NO_DEBUG_PROXIES
-#else
+#if !FX_NO_DEBUG_PROXIES
     [<System.Diagnostics.DebuggerTypeProxyAttribute(typedefof<ListDebugView<_>>)>]
 #endif
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
     [<DebuggerDisplay("{DebugDisplay,nq}")>]
 #endif
     [<CodeAnalysis.SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix")>]
@@ -3475,6 +3497,10 @@ namespace Microsoft.FSharp.Collections
        | (::)  : Head: 'T * Tail: 'T list -> 'T list
        interface System.Collections.Generic.IEnumerable<'T>
        interface System.Collections.IEnumerable
+
+#if !FSCORE_PORTABLE_OLD
+       interface System.Collections.Generic.IReadOnlyCollection<'T>
+#endif
         
     and 'T list = List<'T>
 
@@ -3491,8 +3517,7 @@ namespace Microsoft.FSharp.Collections
                | [] -> n 
                | _::t -> if n > ListDebugViewMaxLength then n else count t (n+1) 
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
            [<DebuggerBrowsable(DebuggerBrowsableState.RootHidden)>]
 #endif
            member x.Items =
@@ -3580,7 +3605,7 @@ namespace Microsoft.FSharp.Collections
             match l with 
             | [] -> raise (new System.ArgumentException(SR.GetString(SR.indexOutOfBounds),"n"))
             | h::t -> 
-               if n < 0 then raise (new System.ArgumentException(SR.GetString(SR.inputMustBeNonNegative),"n"))
+               if n < 0 then raise (new System.ArgumentException((SR.GetString(SR.inputMustBeNonNegative)),"n"))
                elif n = 0 then h
                else nth t (n - 1)
 
@@ -3616,14 +3641,12 @@ namespace Microsoft.FSharp.Collections
             loop n l
 
     type List<'T> with
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         member l.Length = PrivateListHelpers.lengthAcc 0 l
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         member l.DebugDisplay = 
@@ -3636,15 +3659,13 @@ namespace Microsoft.FSharp.Collections
         member l.Head   = match l with a :: _ -> a | [] -> raise (System.InvalidOperationException(SR.GetString(SR.inputListWasEmpty)))
         member l.Tail   = match l with _ :: b -> b | [] -> raise (System.InvalidOperationException(SR.GetString(SR.inputListWasEmpty)))
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         member l.IsEmpty  = match l with [] -> true | _ -> false
         member l.Item with get(index) = PrivateListHelpers.nth l index
 
-#if FX_NO_DEBUG_DISPLAYS
-#else
+#if !FX_NO_DEBUG_DISPLAYS
         [<DebuggerBrowsable(DebuggerBrowsableState.Never)>]
 #endif
         static member Empty       : 'T list = []
@@ -3672,6 +3693,11 @@ namespace Microsoft.FSharp.Collections
 
         interface System.Collections.IEnumerable with
             member l.GetEnumerator() = (PrivateListHelpers.mkListEnumerator l :> System.Collections.IEnumerator)
+
+#if !FSCORE_PORTABLE_OLD
+        interface IReadOnlyCollection<'T> with
+            member l.Count = l.Length
+#endif
 
     type seq<'T> = IEnumerable<'T>
 
@@ -3766,6 +3792,12 @@ namespace Microsoft.FSharp.Core
             match value with 
             | null -> true 
             | _ -> false
+
+        [<CompiledName("IsNotNull")>]
+        let inline internal isNotNull (value : 'T) = 
+            match value with 
+            | null -> false 
+            | _ -> true
 
         [<CompiledName("Raise")>]
         let raise (e: exn) = (# "throw" e : 'T #)
@@ -4085,7 +4117,7 @@ namespace Microsoft.FSharp.Core
 #if FX_NO_CHAR_PARSE
         // replace System.Char.Parse
         let inline charParse (s: string) =
-            if s = null then raise (System.ArgumentNullException())
+            if isNull s then raise (System.ArgumentNullException())
             elif s.Length = 1 then s.[0]
             else raise (System.FormatException "String must be exactly one character long.")
 #endif
@@ -4102,15 +4134,13 @@ namespace Microsoft.FSharp.Core
               let lastCons = PrivateListHelpers.appendToFreshConsTail res t 
               PrivateListHelpers.setFreshConsTail lastCons l2;
               res
-        
 
         [<CompiledName("Increment")>]
         let incr x = x.contents <- x.contents + 1
 
         [<CompiledName("Decrement")>]
         let decr x = x.contents <- x.contents - 1
-#if FX_NO_EXIT
-#else
+#if !FX_NO_EXIT
         [<CompiledName("Exit")>]
         let exit (n:int) = System.Environment.Exit(n); failwith "System.Environment.Exit did not exit!"
 #endif
@@ -4120,8 +4150,8 @@ namespace Microsoft.FSharp.Core
         let inline ParseUInt16 (s:string)     = (# "conv.ovf.u2" (ParseUInt32 s) : uint16 #)
         let inline ParseIntPtr (s:string)  = (# "conv.ovf.i"  (ParseInt64 s)  : nativeint #)
         let inline ParseUIntPtr (s:string) = (# "conv.ovf.u"  (ParseInt64 s)  : unativeint #)
-        let inline ParseDouble (s:string)   = Double.Parse(s,NumberStyles.Float, CultureInfo.InvariantCulture)
-        let inline ParseSingle (s:string) = Single.Parse(s,NumberStyles.Float, CultureInfo.InvariantCulture)
+        let inline ParseDouble (s:string)   = Double.Parse(removeUnderscores s,NumberStyles.Float, CultureInfo.InvariantCulture)
+        let inline ParseSingle (s:string) = Single.Parse(removeUnderscores s,NumberStyles.Float, CultureInfo.InvariantCulture)
             
 
         [<NoDynamicInvocation>]
@@ -4604,6 +4634,7 @@ namespace Microsoft.FSharp.Core
                 when ^T : decimal     = System.Decimal.op_Inequality((# "" x:decimal #), (# "" y:decimal #))
 
 
+            // static comparison (ER mode) with static optimizations for some well-known cases
             [<CompiledName("Compare")>]
             let inline compare (x:^T) (y:^T) : int = 
                  (if x < y then -1 elif x > y then 1 else 0)
@@ -4618,8 +4649,16 @@ namespace Microsoft.FSharp.Core
                  when ^T : uint32 = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when ^T : uint64 = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when ^T : unativeint = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
-                 when ^T : float  = if (# "clt" x y : bool #) then (-1) else (# "cgt" x y : int #)
-                 when ^T : float32 = if (# "clt" x y : bool #) then (-1) else (# "cgt" x y : int #)
+                 when ^T : float  = if   (# "clt" x y : bool #) then (-1)
+                                    elif (# "cgt" x y : bool #) then (1)
+                                    elif (# "ceq" x y : bool #) then (0)
+                                    elif (# "ceq" y y : bool #) then (-1)
+                                    else (# "ceq" x x : int #)
+                 when ^T : float32 = if   (# "clt" x y : bool #) then (-1)
+                                     elif (# "cgt" x y : bool #) then (1)
+                                     elif (# "ceq" x y : bool #) then (1)
+                                     elif (# "ceq" y y : bool #) then (-1)
+                                     else (# "ceq" x x : int #)
                  when ^T : char   = if (# "clt.un" x y : bool #) then (-1) else (# "cgt.un" x y : int #)
                  when ^T : string = 
                      // NOTE: we don't have to null check here because System.String.CompareOrdinal
@@ -4659,29 +4698,26 @@ namespace Microsoft.FSharp.Core
         module Attributes = 
             open System.Runtime.CompilerServices
 
-#if FX_NO_DEFAULT_DEPENDENCY_TYPE
-#else
+#if !FX_NO_DEFAULT_DEPENDENCY_TYPE
             [<Dependency("FSharp.Core",LoadHint.Always)>] 
             [<assembly: System.Runtime.CompilerServices.DefaultDependency(System.Runtime.CompilerServices.LoadHint.Always)>] 
 #endif
 
-#if FX_NO_COMVISIBLE
-#else
+#if !FX_NO_COMVISIBLE
             [<assembly: System.Runtime.InteropServices.ComVisible(false)>]
 #endif            
             [<assembly: System.CLSCompliant(true)>]
 
 #if BE_SECURITY_TRANSPARENT
             [<assembly: System.Security.SecurityTransparent>] // assembly is fully transparent
+#if CROSS_PLATFORM_COMPILER
+#else
             [<assembly: System.Security.SecurityRules(System.Security.SecurityRuleSet.Level2)>] // v4 transparency; soon to be the default, but not yet
+#endif
 #else
-#if FX_NO_SECURITY_PERMISSIONS
-#else
-#if FX_SIMPLE_SECURITY_PERMISSIONS
+#if !FX_NO_SECURITY_PERMISSIONS
             // REVIEW: Need to choose a specific permission for the action to be applied to
             [<assembly: System.Security.Permissions.SecurityPermission(System.Security.Permissions.SecurityAction.RequestMinimum)>]
-#else
-#endif
 #endif
 #endif
             do ()
@@ -5194,6 +5230,116 @@ namespace Microsoft.FSharp.Core
                   interface IEnumerable with 
                       member x.GetEnumerator() = (gen() :> IEnumerator) }
 
+            [<NoEquality; NoComparison>]
+            type VariableStepIntegralRangeState<'T> = {
+                mutable Started  : bool
+                mutable Complete : bool
+                mutable Current  : 'T
+            }
+            let inline variableStepIntegralRange n step m =
+                if step = LanguagePrimitives.GenericZero then
+                    invalidArg "step" (SR.GetString(SR.stepCannotBeZero));
+
+                let variableStepRangeEnumerator () =
+                    let state = {
+                        Started  = false
+                        Complete = false
+                        Current  = Unchecked.defaultof<'T>
+                    }
+
+                    let current () = 
+                        // according to IEnumerator<int>.Current documentation, the result of of Current
+                        // is undefined prior to the first call of MoveNext and post called to MoveNext
+                        // that return false (see https://msdn.microsoft.com/en-us/library/58e146b7%28v=vs.110%29.aspx)
+                        // so we should be able to just return value here, and we could get rid of the 
+                        // complete variable which would be faster
+                        if not state.Started then
+                            notStarted ()
+                        elif state.Complete then
+                            alreadyFinished ()
+                        else
+                            state.Current
+
+                    { new IEnumerator<'T> with
+                        member __.Dispose () = ()
+
+                        member __.Current = current ()
+
+                      interface IEnumerator with 
+                        member __.Current = box (current ())
+
+                        member __.Reset () =
+                            state.Started <- false
+                            state.Complete <- false
+                            state.Current <- Unchecked.defaultof<_> 
+
+                        member __.MoveNext () =
+                            if not state.Started then
+                                state.Started <- true
+                                state.Current <- n
+                                state.Complete <- 
+                                    (  (step > LanguagePrimitives.GenericZero && state.Current > m)
+                                    || (step < LanguagePrimitives.GenericZero && state.Current < m))
+                            else
+                                let next = state.Current + step
+                                if   (step > LanguagePrimitives.GenericZero && next > state.Current && next <= m)
+                                    || (step < LanguagePrimitives.GenericZero && next < state.Current && next >= m) then
+                                    state.Current <- next
+                                else
+                                    state.Complete <- true
+
+                            not state.Complete}
+
+                { new IEnumerable<'T> with
+                    member __.GetEnumerator () = variableStepRangeEnumerator ()
+
+                  interface IEnumerable with
+                    member this.GetEnumerator () = (variableStepRangeEnumerator ()) :> IEnumerator }
+
+            let inline simpleIntegralRange minValue maxValue n step m =
+                if step <> LanguagePrimitives.GenericOne || n > m || n = minValue || m = maxValue then 
+                    variableStepIntegralRange n step m
+                else 
+                    // a constrained, common simple iterator that is fast.
+                    let singleStepRangeEnumerator () =
+                        let value : Ref<'T> = ref (n - LanguagePrimitives.GenericOne)
+
+                        let inline current () =
+                            // according to IEnumerator<int>.Current documentation, the result of of Current
+                            // is undefined prior to the first call of MoveNext and post called to MoveNext
+                            // that return false (see https://msdn.microsoft.com/en-us/library/58e146b7%28v=vs.110%29.aspx)
+                            // so we should be able to just return value here, which would be faster
+                            let derefValue = !value
+                            if derefValue < n then
+                                notStarted ()
+                            elif derefValue > m then
+                                alreadyFinished ()
+                            else 
+                                derefValue
+
+                        { new IEnumerator<'T> with
+                            member __.Dispose () = ()
+                            member __.Current = current ()
+
+                          interface IEnumerator with
+                            member __.Current = box (current ())
+                            member __.Reset () = value := n - LanguagePrimitives.GenericOne
+                            member __.MoveNext () =
+                                let derefValue = !value
+                                if derefValue < m then
+                                    value := derefValue + LanguagePrimitives.GenericOne
+                                    true
+                                elif derefValue = m then 
+                                    value := derefValue + LanguagePrimitives.GenericOne
+                                    false
+                                else false }
+
+                    { new IEnumerable<'T> with
+                        member __.GetEnumerator () = singleStepRangeEnumerator ()
+
+                      interface IEnumerable with
+                        member __.GetEnumerator () = (singleStepRangeEnumerator ()) :> IEnumerator }
+
             // For RangeStepGeneric, zero and add are functions representing the static resolution of GenericZero and (+)
             // for the particular static type. 
             let inline integralRangeStep<'T,'Step> (zero:'Step) (add:'T -> 'Step -> 'T) (n:'T, step:'Step, m:'T) =
@@ -5273,16 +5419,16 @@ namespace Microsoft.FSharp.Core
                   interface System.Collections.IEnumerable with 
                       member x.GetEnumerator() = (gen() :> System.Collections.IEnumerator) }
 
-            let RangeInt32   n step m : seq<int>        = integralRangeStep 0    (+) (n,step,m)
-            let RangeInt64   n step m : seq<int64>      = integralRangeStep 0L   (+) (n,step,m)
-            let RangeUInt64  n step m : seq<uint64>     = integralRangeStep 0UL  (+) (n,step,m)
-            let RangeUInt32  n step m : seq<uint32>     = integralRangeStep 0ul  (+) (n,step,m)
-            let RangeIntPtr  n step m : seq<nativeint>  = integralRangeStep 0n   (+) (n,step,m)
-            let RangeUIntPtr n step m : seq<unativeint> = integralRangeStep 0un  (+) (n,step,m)
-            let RangeInt16   n step m : seq<int16>      = integralRangeStep 0s   (+) (n,step,m)
-            let RangeUInt16  n step m : seq<uint16>     = integralRangeStep 0us  (+) (n,step,m)
-            let RangeSByte   n step m : seq<sbyte>      = integralRangeStep 0y   (+) (n,step,m)
-            let RangeByte    n step m : seq<byte>       = integralRangeStep 0uy  (+) (n,step,m)
+            let RangeInt32   n step m : seq<int>        = simpleIntegralRange Int32.MinValue Int32.MaxValue n step m
+            let RangeInt64   n step m : seq<int64>      = simpleIntegralRange Int64.MinValue Int64.MaxValue n step m
+            let RangeUInt64  n step m : seq<uint64>     = simpleIntegralRange UInt64.MinValue UInt64.MaxValue n step m
+            let RangeUInt32  n step m : seq<uint32>     = simpleIntegralRange UInt32.MinValue UInt32.MaxValue n step m
+            let RangeIntPtr  n step m : seq<nativeint>  = variableStepIntegralRange n step m
+            let RangeUIntPtr n step m : seq<unativeint> = variableStepIntegralRange n step m
+            let RangeInt16   n step m : seq<int16>      = simpleIntegralRange Int16.MinValue Int16.MaxValue n step m
+            let RangeUInt16  n step m : seq<uint16>     = simpleIntegralRange UInt16.MinValue UInt16.MaxValue n step m
+            let RangeSByte   n step m : seq<sbyte>      = simpleIntegralRange SByte.MinValue SByte.MaxValue n step m
+            let RangeByte    n step m : seq<byte>       = simpleIntegralRange Byte.MinValue Byte.MaxValue n step m
             let RangeDouble  n step m : seq<float>      = floatingRange float   (n,step,m)
             let RangeSingle  n step m : seq<float32>    = floatingRange float32 (n,step,m)
             let RangeGeneric   one add n m : seq<'T> = integralRange (one,add,n,m)
@@ -5351,16 +5497,16 @@ namespace Microsoft.FSharp.Core
             [<CodeAnalysis.SuppressMessage("Microsoft.Naming","CA1709:IdentifiersShouldBeCasedCorrectly");  CodeAnalysis.SuppressMessage("Microsoft.Naming","CA1704:IdentifiersShouldBeSpelledCorrectly")>]
             let PowGeneric (one,mul,x:'T,n) = ComputePowerGenericInlined  one mul x n 
 
-            let inline ComputeSlice start finish length =
+            let inline ComputeSlice bound start finish length =
                 match start, finish with
-                | None, None -> 0, length - 1
-                | None, Some n when n >= 0 -> 0, n
-                | Some m, None when m <= length -> m, length - 1
+                | None, None -> bound, bound + length - 1
+                | None, Some n when n >= bound  -> bound , n
+                | Some m, None when m <= bound + length -> m, bound + length - 1
                 | Some m, Some n -> m, n
                 | _ -> raise (System.IndexOutOfRangeException())
 
             let inline GetArraySlice (arr: _[]) start finish =
-                let start, finish = ComputeSlice start finish arr.Length
+                let start, finish = ComputeSlice 0 start finish arr.Length
                 GetArraySub arr start (finish - start + 1)
 
             let inline SetArraySlice (dst: _[]) start finish (src:_[]) = 
@@ -5369,14 +5515,17 @@ namespace Microsoft.FSharp.Core
                 SetArraySub dst start (finish - start + 1) src
 
             let GetArraySlice2D (arr: _[,]) start1 finish1 start2 finish2 =
-                let start1, finish1 = ComputeSlice start1 finish1 (GetArray2DLength1 arr)
-                let start2, finish2 = ComputeSlice start2 finish2 (GetArray2DLength2 arr)
+                let bound1 = arr.GetLowerBound(0)
+                let bound2 = arr.GetLowerBound(1)
+                let start1, finish1 = ComputeSlice bound1 start1 finish1 (GetArray2DLength1 arr)
+                let start2, finish2 = ComputeSlice bound2 start2 finish2 (GetArray2DLength2 arr)
                 let len1 = (finish1 - start1 + 1)
                 let len2 = (finish2 - start2 + 1)
                 GetArray2DSub arr start1 start2 len1 len2
 
             let inline GetArraySlice2DFixed1 (arr: _[,]) fixed1 start2 finish2 = 
-                let start2, finish2 = ComputeSlice start2 finish2 (GetArray2DLength2 arr)
+                let bound2 = arr.GetLowerBound(1)
+                let start2, finish2 = ComputeSlice bound2 start2 finish2 (GetArray2DLength2 arr)
                 let len2 = (finish2 - start2 + 1)
                 let dst = zeroCreate (if len2 < 0 then 0 else len2)
                 for j = 0 to len2 - 1 do 
@@ -5384,7 +5533,8 @@ namespace Microsoft.FSharp.Core
                 dst
 
             let inline GetArraySlice2DFixed2 (arr: _[,]) start1 finish1 fixed2 =
-                let start1, finish1 = ComputeSlice start1 finish1 (GetArray2DLength1 arr) 
+                let bound1 = arr.GetLowerBound(0)
+                let start1, finish1 = ComputeSlice bound1 start1 finish1 (GetArray2DLength1 arr) 
                 let len1 = (finish1 - start1 + 1)
                 let dst = zeroCreate (if len1 < 0 then 0 else len1)
                 for i = 0 to len1 - 1 do 
@@ -5392,49 +5542,63 @@ namespace Microsoft.FSharp.Core
                 dst
 
             let inline SetArraySlice2DFixed1 (dst: _[,]) fixed1 start2 finish2 (src:_[]) = 
-                let start2  = (match start2 with None -> 0 | Some n -> n) 
-                let finish2 = (match finish2 with None -> GetArray2DLength2 dst - 1 | Some n -> n) 
+                let bound2 = dst.GetLowerBound(1)
+                let start2  = (match start2 with None -> bound2 | Some n -> n) 
+                let finish2 = (match finish2 with None -> bound2 + GetArray2DLength2 dst - 1 | Some n -> n) 
                 let len2 = (finish2 - start2 + 1)
                 for j = 0 to len2 - 1 do
-                    SetArray2D dst fixed1 (start2+j) (GetArray src j)
+                    SetArray2D dst fixed1 (bound2+start2+j) (GetArray src j)
 
             let inline SetArraySlice2DFixed2 (dst: _[,]) start1 finish1 fixed2 (src:_[]) = 
-                let start1  = (match start1 with None -> 0 | Some n -> n) 
-                let finish1 = (match finish1 with None -> GetArray2DLength1 dst - 1 | Some n -> n) 
+                let bound1 = dst.GetLowerBound(0)
+                let start1  = (match start1 with None -> bound1 | Some n -> n) 
+                let finish1 = (match finish1 with None -> bound1 + GetArray2DLength1 dst - 1 | Some n -> n) 
                 let len1 = (finish1 - start1 + 1)
                 for i = 0 to len1 - 1 do
-                    SetArray2D dst (start1+i) fixed2 (GetArray src i)
+                    SetArray2D dst (bound1+start1+i) fixed2 (GetArray src i)
 
             let SetArraySlice2D (dst: _[,]) start1 finish1 start2 finish2 (src:_[,]) = 
-                let start1  = (match start1 with None -> 0 | Some n -> n) 
-                let start2  = (match start2 with None -> 0 | Some n -> n) 
-                let finish1 = (match finish1 with None -> GetArray2DLength1 dst - 1 | Some n -> n) 
-                let finish2 = (match finish2 with None -> GetArray2DLength2 dst - 1 | Some n -> n) 
+                let bound1 = dst.GetLowerBound(0)
+                let bound2 = dst.GetLowerBound(1)
+                let start1  = (match start1 with None -> bound1 | Some n -> n) 
+                let start2  = (match start2 with None -> bound2 | Some n -> n) 
+                let finish1 = (match finish1 with None -> bound1 + GetArray2DLength1 dst - 1 | Some n -> n) 
+                let finish2 = (match finish2 with None -> bound2 + GetArray2DLength2 dst - 1 | Some n -> n) 
                 SetArray2DSub dst start1 start2 (finish1 - start1 + 1) (finish2 - start2 + 1) src
 
             let GetArraySlice3D (arr: _[,,]) start1 finish1 start2 finish2 start3 finish3 =
-                let start1, finish1 = ComputeSlice start1 finish1 (GetArray3DLength1 arr)              
-                let start2, finish2 = ComputeSlice start2 finish2 (GetArray3DLength2 arr)              
-                let start3, finish3 = ComputeSlice start3 finish3 (GetArray3DLength3 arr)              
+                let bound1 = arr.GetLowerBound(0)
+                let bound2 = arr.GetLowerBound(1)
+                let bound3 = arr.GetLowerBound(2)
+                let start1, finish1 = ComputeSlice bound1 start1 finish1 (GetArray3DLength1 arr)              
+                let start2, finish2 = ComputeSlice bound2 start2 finish2 (GetArray3DLength2 arr)              
+                let start3, finish3 = ComputeSlice bound3 start3 finish3 (GetArray3DLength3 arr)              
                 let len1 = (finish1 - start1 + 1)
                 let len2 = (finish2 - start2 + 1)
                 let len3 = (finish3 - start3 + 1)
                 GetArray3DSub arr start1 start2 start3 len1 len2 len3
 
             let SetArraySlice3D (dst: _[,,]) start1 finish1 start2 finish2 start3 finish3 (src:_[,,]) = 
-                let start1  = (match start1 with None -> 0 | Some n -> n) 
-                let start2  = (match start2 with None -> 0 | Some n -> n) 
-                let start3  = (match start3 with None -> 0 | Some n -> n) 
-                let finish1 = (match finish1 with None -> GetArray3DLength1 dst - 1 | Some n -> n) 
-                let finish2 = (match finish2 with None -> GetArray3DLength2 dst - 1 | Some n -> n) 
-                let finish3 = (match finish3 with None -> GetArray3DLength3 dst - 1 | Some n -> n) 
+                let bound1 = dst.GetLowerBound(0)
+                let bound2 = dst.GetLowerBound(1)
+                let bound3 = dst.GetLowerBound(2)
+                let start1  = (match start1 with None -> bound1 | Some n -> n) 
+                let start2  = (match start2 with None -> bound2 | Some n -> n) 
+                let start3  = (match start3 with None -> bound3 | Some n -> n) 
+                let finish1 = (match finish1 with None -> bound1 + GetArray3DLength1 dst - 1 | Some n -> n) 
+                let finish2 = (match finish2 with None -> bound2 + GetArray3DLength2 dst - 1 | Some n -> n) 
+                let finish3 = (match finish3 with None -> bound3 + GetArray3DLength3 dst - 1 | Some n -> n) 
                 SetArray3DSub dst start1 start2 start3 (finish1 - start1 + 1) (finish2 - start2 + 1) (finish3 - start3 + 1) src
 
             let GetArraySlice4D (arr: _[,,,]) start1 finish1 start2 finish2 start3 finish3 start4 finish4 = 
-                let start1, finish1 = ComputeSlice start1 finish1 (Array4DLength1 arr)              
-                let start2, finish2 = ComputeSlice start2 finish2 (Array4DLength2 arr)              
-                let start3, finish3 = ComputeSlice start3 finish3 (Array4DLength3 arr)              
-                let start4, finish4 = ComputeSlice start4 finish4 (Array4DLength4 arr)              
+                let bound1 = arr.GetLowerBound(0)
+                let bound2 = arr.GetLowerBound(1)
+                let bound3 = arr.GetLowerBound(2)
+                let bound4 = arr.GetLowerBound(3)
+                let start1, finish1 = ComputeSlice bound1 start1 finish1 (Array4DLength1 arr)              
+                let start2, finish2 = ComputeSlice bound2 start2 finish2 (Array4DLength2 arr)              
+                let start3, finish3 = ComputeSlice bound3 start3 finish3 (Array4DLength3 arr)              
+                let start4, finish4 = ComputeSlice bound4 start4 finish4 (Array4DLength4 arr)              
                 let len1 = (finish1 - start1 + 1)
                 let len2 = (finish2 - start2 + 1)
                 let len3 = (finish3 - start3 + 1)
@@ -5442,18 +5606,22 @@ namespace Microsoft.FSharp.Core
                 GetArray4DSub arr start1 start2 start3 start4 len1 len2 len3 len4
 
             let SetArraySlice4D (dst: _[,,,]) start1 finish1 start2 finish2 start3 finish3 start4 finish4 (src:_[,,,]) = 
-                let start1  = (match start1 with None -> 0 | Some n -> n) 
-                let start2  = (match start2 with None -> 0 | Some n -> n) 
-                let start3  = (match start3 with None -> 0 | Some n -> n) 
-                let start4  = (match start4 with None -> 0 | Some n -> n) 
-                let finish1 = (match finish1 with None -> Array4DLength1 dst - 1 | Some n -> n) 
-                let finish2 = (match finish2 with None -> Array4DLength2 dst - 1 | Some n -> n) 
-                let finish3 = (match finish3 with None -> Array4DLength3 dst - 1 | Some n -> n) 
-                let finish4 = (match finish4 with None -> Array4DLength4 dst - 1 | Some n -> n) 
+                let bound1 = dst.GetLowerBound(0)
+                let bound2 = dst.GetLowerBound(1)
+                let bound3 = dst.GetLowerBound(2)
+                let bound4 = dst.GetLowerBound(3)
+                let start1  = (match start1 with None -> bound1 | Some n -> n) 
+                let start2  = (match start2 with None -> bound2 | Some n -> n) 
+                let start3  = (match start3 with None -> bound3 | Some n -> n) 
+                let start4  = (match start4 with None -> bound4 | Some n -> n) 
+                let finish1 = (match finish1 with None -> bound1 + Array4DLength1 dst - 1 | Some n -> n) 
+                let finish2 = (match finish2 with None -> bound2 + Array4DLength2 dst - 1 | Some n -> n) 
+                let finish3 = (match finish3 with None -> bound3 + Array4DLength3 dst - 1 | Some n -> n) 
+                let finish4 = (match finish4 with None -> bound4 + Array4DLength4 dst - 1 | Some n -> n) 
                 SetArray4DSub dst start1 start2 start3 start4 (finish1 - start1 + 1) (finish2 - start2 + 1) (finish3 - start3 + 1) (finish4 - start4 + 1) src
 
             let inline GetStringSlice (str:string) start finish =
-                let start, finish = ComputeSlice start finish str.Length
+                let start, finish = ComputeSlice 0 start finish str.Length
                 let len = finish-start+1
                 if len <= 0 then String.Empty
                 else str.Substring(start, len)
@@ -6257,7 +6425,7 @@ namespace Microsoft.FSharp.Control
     type Handler<'Args> =  delegate of sender:obj * args:'Args -> unit 
 
     type IEvent<'Args> = IEvent<Handler<'Args>, 'Args>
-    
+
     // FxCop suppressions 
     open System.Diagnostics.CodeAnalysis
     [<assembly: SuppressMessage("Microsoft.Usage", "CA2225:OperatorOverloadsHaveNamedAlternates", Scope="member", Target="Microsoft.FSharp.Core.Operators.#op_Addition`3(!!0,!!1)",Justification="This is an F# primitive operator name")>]
@@ -6286,15 +6454,14 @@ namespace Microsoft.FSharp.Control
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1721:PropertyNamesShouldNotMatchGetMethods", Scope="member", Target="Microsoft.FSharp.Quotations.FSharpVar.#Type",Justification="This appears to be a false warning from FxCop")>]
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix", Scope="member", Target="Microsoft.FSharp.Control.FSharpEvent`1.#Publish",Justification="")>]
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix", Scope="type", Target="Microsoft.FSharp.Collections.FSharpSet`1",Justification="Adding suffix 'Collection' would break the simple user model of this type, akin to 'List'")>]
-    
+
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix", Scope="type", Target="Microsoft.FSharp.Collections.FSharpList`1+_Empty",Justification="This is a compilation residue from a public discrimianted union, which are allowed in FSharp.Core.dll")>]
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1710:IdentifiersShouldHaveCorrectSuffix", Scope="type", Target="Microsoft.FSharp.Collections.FSharpList`1+_Cons",Justification="This is a compilation residue from a public discrimianted union, which are allowed in FSharp.Core.dll")>]
     [<assembly: SuppressMessage("Microsoft.Usage", "CA2224:OverrideEqualsOnOverloadingOperatorEquals", Scope="type", Target="Microsoft.FSharp.Core.Operators",Justification="This is from the use of op_Equality as a primitive F# operator name. We do not need any override")>]
     [<assembly: SuppressMessage("Microsoft.Design", "CA1009:DeclareEventHandlersCorrectly", Scope="member", Target="Microsoft.FSharp.Control.FSharpEvent`1.#Publish",Justification="This appears to be a false warning from FxCop")>]
     [<assembly: SuppressMessage("Microsoft.Design", "CA1030:UseEventsWhereAppropriate", Scope="member", Target="Microsoft.FSharp.Core.Operators.#Raise`1(System.Exception)",Justification="No event required here")>]
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1724:TypeNamesShouldNotMatchNamespaces", Scope="type", Target="Microsoft.FSharp.Text.StructuredPrintfImpl.Layout",Justification="This functionality is scheduled for deletion from FSharp.Core.dll")>]
-    
-    
+
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1719:ParameterNamesShouldNotMatchMemberNames", Scope="member", Target="Microsoft.FSharp.Quotations.FSharpExpr.#Value(System.Object,System.Type)", MessageId="0#")>]
     [<assembly: SuppressMessage("Microsoft.Naming", "CA1719:ParameterNamesShouldNotMatchMemberNames", Scope="member", Target="Microsoft.FSharp.Quotations.FSharpExpr.#Value`1(!!0)", MessageId="0#")>]
 
@@ -6401,4 +6568,3 @@ namespace Microsoft.FSharp.Control
     [<assembly: SuppressMessage("Microsoft.Design", "CA1032:ImplementStandardExceptionConstructors", Scope="type", Target="Microsoft.FSharp.Core.MatchFailureException",Justification="Like F# record types, F# exception declarations implement one primary constructor which accepts initial values for all fields")>]
     [<assembly:CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1051:DoNotDeclareVisibleInstanceFields", Scope="member", Target="Microsoft.FSharp.Core.FSharpRef`1.#contents@")>]
     do()
-

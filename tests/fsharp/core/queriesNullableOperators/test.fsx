@@ -1,5 +1,5 @@
 ﻿// #Query
-#if Portable
+#if TESTS_AS_APP
 module Core_queriesNullableOperators
 #endif
 
@@ -13,29 +13,18 @@ open Microsoft.FSharp.Linq.RuntimeHelpers
 
 [<AutoOpen>]
 module Infrastructure =
-    let mutable failures = []
-    let reportFailure s = 
-        stderr.WriteLine " NO"; failures <- s :: failures
+    let failures = ref []
 
-#if NetCore
-#else
-    let argv = System.Environment.GetCommandLineArgs() 
-    let SetCulture() = 
-        if argv.Length > 2 && argv.[1] = "--culture" then  
-            let cultureString = argv.[2] 
-            let culture = new System.Globalization.CultureInfo(cultureString) 
-            stdout.WriteLine ("Running under culture "+culture.ToString()+"...");
-            System.Threading.Thread.CurrentThread.CurrentCulture <-  culture
-  
-    do SetCulture()    
-#endif
+    let report_failure (s : string) = 
+        stderr.Write" NO: "
+        stderr.WriteLine s
+        failures := !failures @ [s]
 
     let check  s v1 v2 = 
        if v1 = v2 then 
            printfn "test %s...passed " s 
        else 
-           failures <- failures @ [(s, box v1, box v2)]
-           printfn "test %s...failed, expected %A got %A" s v2 v1
+           report_failure (sprintf "test %s...failed, expected %A got %A" s v2 v1)
 
     let test s b = check s b true
 
@@ -291,7 +280,9 @@ module NullableConversions =
     open Microsoft.FSharp.Data.UnitSystems.SI.UnitSymbols
 
     check "opp2oin209v3041" (Nullable.byte (Nullable 2)) (Nullable 2uy)
+    check "opp2oin209v3041" (Nullable.uint8 (Nullable 2)) (Nullable 2uy)
     check "opp2oin209v3042" (Nullable.sbyte (Nullable 2)) (Nullable 2y)
+    check "opp2oin209v3042" (Nullable.int8 (Nullable 2)) (Nullable 2y)
     check "opp2oin209v3043" (Nullable.uint16(Nullable 2 )) (Nullable 2us)
     check "opp2oin209v3044" (Nullable.int16(Nullable 2 )) (Nullable 2s)
     check "opp2oin209v3045" (Nullable.uint32 (Nullable 2s)) (Nullable 2u)
@@ -303,14 +294,27 @@ module NullableConversions =
     check "opp2oin209v304w" (Nullable.enum(Nullable 2 ): System.Nullable<System.DayOfWeek>) (Nullable System.DayOfWeek.Tuesday )
 
     check "opp2oin209v304e" (Nullable.sbyte (Nullable 2<kg>)) (Nullable 2y)
+    check "opp2oin209v304e" (Nullable.int8  (Nullable 2<kg>)) (Nullable 2y)
     check "opp2oin209v304r" (Nullable.int16 (Nullable 2<kg>)) (Nullable 2s)
     check "opp2oin209v304t" (Nullable.int32 (Nullable 2s<kg>)) (Nullable 2)
     check "opp2oin209v304y" (Nullable.int64 (Nullable 2<kg>)) (Nullable 2L)
     check "opp2oin209v304u" (Nullable.float (Nullable 2<kg>)) (Nullable 2.0)
+    check "opp2oin209v304u" (Nullable.double (Nullable 2<kg>)) (Nullable 2.0)
     check "opp2oin209v304i" (Nullable.float32 (Nullable 2<kg>)) (Nullable 2.0f)
+    check "opp2oin209v304i" (Nullable.single (Nullable 2<kg>)) (Nullable 2.0f)
 
+
+#if TESTS_AS_APP
+let RUN() = !failures
+#else
 let aa =
-  if not failures.IsEmpty then (printfn "Test Failed, failures = %A" failures; exit 1) 
-  else (stdout.WriteLine "Test Passed"; 
-        System.IO.File.WriteAllText("test.ok","ok"); 
-        exit 0)
+  match !failures with 
+  | [] -> 
+      stdout.WriteLine "Test Passed"
+      System.IO.File.WriteAllText("test.ok","ok")
+      exit 0
+  | _ -> 
+      stdout.WriteLine "Test Failed"
+      exit 1
+#endif
+

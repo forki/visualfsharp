@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Compiler.AbstractIL.Internal
 
@@ -26,7 +26,7 @@ module internal Zmap =
     val map      : mapping:('T -> 'U) -> Zmap<'Key,'T> -> Zmap<'Key,'U>
     val mapi     : ('Key -> 'T -> 'U) -> Zmap<'Key,'T> -> Zmap<'Key,'U>
     val fold     : ('Key -> 'T -> 'U -> 'U) -> Zmap<'Key,'T> -> 'U -> 'U
-    val foldMap     : ('State -> 'Key -> 'T -> 'State * 'U) -> 'State -> Zmap<'Key,'T> -> 'State * Zmap<'Key,'U>
+    val foldMap  : ('State -> 'Key -> 'T -> 'State * 'U) -> 'State -> Zmap<'Key,'T> -> 'State * Zmap<'Key,'U>
     val iter     : action:('T -> 'U -> unit) -> Zmap<'T, 'U>  -> unit
 
     val foldSection: 'Key -> 'Key -> ('Key -> 'T -> 'U -> 'U) -> Zmap<'Key,'T> -> 'U -> 'U  
@@ -39,8 +39,7 @@ module internal Zmap =
     val chooseL  : ('Key -> 'T -> 'U option) -> Zmap<'Key,'T> -> 'U list
 
     val toList   : Zmap<'Key,'T> -> ('Key * 'T) list
-    val ofList   : IComparer<'Key> -> ('Key * 'T) list -> Zmap<'Key,'T>  
-    val ofFlatList : IComparer<'Key> -> FlatList<'Key * 'T> -> Zmap<'Key,'T>  
+    val ofList   : IComparer<'Key> -> ('Key * 'T) list -> Zmap<'Key,'T>
 
     val keys     : Zmap<'Key,'T> -> 'Key list
     val values   : Zmap<'Key,'T> -> 'T   list

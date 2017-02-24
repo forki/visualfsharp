@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 /// <summary>Pervasives: Additional bindings available at the top level</summary>
 namespace Microsoft.FSharp.Core
@@ -13,8 +13,7 @@ module ExtraTopLevelOperators =
     open Microsoft.FSharp.Text
     open Microsoft.FSharp.Math
 
-#if FX_NO_SYSTEM_CONSOLE
-#else    
+#if !FX_NO_SYSTEM_CONSOLE
     /// <summary>Print to <c>stdout</c> using the given format.</summary>
     /// <param name="format">The formatter.</param>
     /// <returns>The formatted result.</returns>
@@ -73,7 +72,7 @@ module ExtraTopLevelOperators =
     [<CompiledName("CreateSet")>]
     val set : elements:seq<'T> -> Set<'T>
 
-    /// <summary>Builds an aysnchronous workflow using computation expression syntax.</summary>
+    /// <summary>Builds an asynchronous workflow using computation expression syntax.</summary>
     [<CompiledName("DefaultAsyncBuilder")>]
     val async : Microsoft.FSharp.Control.AsyncBuilder  
 
@@ -87,20 +86,36 @@ module ExtraTopLevelOperators =
     /// <remarks>This is a direct conversion for all 
     /// primitive numeric types. For strings, the input is converted using <c>Double.Parse()</c>  with InvariantCulture settings. Otherwise the operation requires and invokes a <c>ToDouble</c> method on the input type.</remarks>
     [<CompiledName("ToDouble")>]
-    val inline double     : value:^T -> float      when ^T : (static member op_Explicit : ^T -> double)     and default ^T : int
+    val inline double     : value:^T -> double      when ^T : (static member op_Explicit : ^T -> double)     and default ^T : int
 
     /// <summary>Converts the argument to byte.</summary>
     /// <remarks>This is a direct conversion for all 
     /// primitive numeric types. For strings, the input is converted using <c>Byte.Parse()</c> on strings and otherwise requires a <c>ToByte</c> method on the input type.</remarks>
     [<CompiledName("ToByte")>]
-    val inline uint8       : value:^T -> byte       when ^T : (static member op_Explicit : ^T -> byte)       and default ^T : int        
+    val inline uint8       : value:^T -> uint8       when ^T : (static member op_Explicit : ^T -> uint8)       and default ^T : int        
     
     /// <summary>Converts the argument to signed byte.</summary>
     /// <remarks>This is a direct conversion for all 
     /// primitive numeric types. For strings, the input is converted using <c>SByte.Parse()</c>  with InvariantCulture settings.
     /// Otherwise the operation requires and invokes a <c>ToSByte</c> method on the input type.</remarks>
     [<CompiledName("ToSByte")>]
-    val inline int8      : value:^T -> sbyte      when ^T : (static member op_Explicit : ^T -> sbyte)      and default ^T : int
+    val inline int8      : value:^T -> int8      when ^T : (static member op_Explicit : ^T -> int8)      and default ^T : int
+    
+
+    module Checked = 
+
+        /// <summary>Converts the argument to byte.</summary>
+        /// <remarks>This is a direct, checked conversion for all 
+        /// primitive numeric types. For strings, the input is converted using <c>Byte.Parse()</c> on strings and otherwise requires a <c>ToByte</c> method on the input type.</remarks>
+        [<CompiledName("ToByte")>]
+        val inline uint8       : value:^T -> byte       when ^T : (static member op_Explicit : ^T -> uint8)       and default ^T : int        
+    
+        /// <summary>Converts the argument to signed byte.</summary>
+        /// <remarks>This is a direct, checked conversion for all 
+        /// primitive numeric types. For strings, the input is converted using <c>SByte.Parse()</c>  with InvariantCulture settings.
+        /// Otherwise the operation requires and invokes a <c>ToSByte</c> method on the input type.</remarks>
+        [<CompiledName("ToSByte")>]
+        val inline int8      : value:^T -> sbyte      when ^T : (static member op_Explicit : ^T -> int8)      and default ^T : int
     
 
     /// <summary>Builds a read-only lookup table from a sequence of key/value pairs. The key objects are indexed using generic hashing and equality.</summary>
@@ -128,20 +143,9 @@ module ExtraTopLevelOperators =
     val (|Lazy|) : input:Lazy<'T> -> 'T
 
         
-#if QUERIES_IN_FSLIB
     /// <summary>Builds a query using query syntax and operators.</summary>
     val query : Microsoft.FSharp.Linq.QueryBuilder
-#if EXTRA_DEBUG
-    val queryexprpretrans : Microsoft.FSharp.Linq.QueryExprPreTransBuilder
-    val queryexprpreelim : Microsoft.FSharp.Linq.QueryExprPreEliminateNestedBuilder
-    val queryexpr : Microsoft.FSharp.Linq.QueryExprBuilder
-    val queryquote : Microsoft.FSharp.Linq.QueryQuoteBuilder
-    val querylinqexpr : Microsoft.FSharp.Linq.QueryLinqExprBuilder
-#endif
 
-#endif
-
-#if PUT_TYPE_PROVIDERS_IN_FSCORE
 
 namespace Microsoft.FSharp.Core.CompilerServices
 
@@ -150,6 +154,8 @@ namespace Microsoft.FSharp.Core.CompilerServices
     open System.Linq.Expressions
     open System.Collections.Generic
     open Microsoft.FSharp.Core
+    open Microsoft.FSharp.Control
+    open Microsoft.FSharp.Quotations
 
 
     /// <summary>Represents the product of two measure expressions when returned as a generic argument of a provided type.</summary>
@@ -244,22 +250,6 @@ namespace Microsoft.FSharp.Core.CompilerServices
         /// Checks if given type exists in target system runtime library
         member SystemRuntimeContainsType : string -> bool
 
-#if SILVERLIGHT_COMPILER_FSHARP_CORE
-    type IProvidedCustomAttributeTypedArgument =
-        abstract ArgumentType: System.Type
-        abstract Value: System.Object
-
-    type IProvidedCustomAttributeNamedArgument =
-        abstract ArgumentType: System.Type
-        abstract MemberInfo: System.Reflection.MemberInfo
-        abstract TypedValue: IProvidedCustomAttributeTypedArgument
-
-    type IProvidedCustomAttributeData =
-        abstract Constructor: System.Reflection.ConstructorInfo
-        abstract ConstructorArguments: System.Collections.Generic.IList<IProvidedCustomAttributeTypedArgument>
-        abstract NamedArguments: System.Collections.Generic.IList<IProvidedCustomAttributeNamedArgument>
-#endif
-
 
     /// <summary>
     /// Represents a namespace provided by a type provider component.
@@ -319,23 +309,18 @@ namespace Microsoft.FSharp.Core.CompilerServices
         /// <param name="syntheticMethodBase">MethodBase that was given to the compiler by a type returned by a GetType(s) call.</param>
         /// <param name="parameters">Expressions that represent the parameters to this call.</param>
         /// <returns>An expression that the compiler will use in place of the given method base.</returns>
-        abstract GetInvokerExpression : syntheticMethodBase:MethodBase * parameters:Microsoft.FSharp.Quotations.Expr[] -> Microsoft.FSharp.Quotations.Expr
+        abstract GetInvokerExpression : syntheticMethodBase:MethodBase * parameters:Expr[] -> Expr
 
         /// <summary>
         /// Triggered when an assumption changes that invalidates the resolutions so far reported by the provider
         /// </summary>
         [<CLIEvent>]
-        abstract Invalidate : Microsoft.FSharp.Control.IEvent<System.EventHandler, System.EventArgs>
+        abstract Invalidate : IEvent<System.EventHandler, System.EventArgs>
 
         /// <summary>
         /// Get the physical contents of the given logical provided assembly.
         /// </summary>
-        abstract GetGeneratedAssemblyContents : assembly:System.Reflection.Assembly -> byte[]
-
-#if SILVERLIGHT_COMPILER_FSHARP_CORE
-        abstract GetMemberCustomAttributesData : assembly:System.Reflection.MemberInfo -> System.Collections.Generic.IList<IProvidedCustomAttributeData>
-        abstract GetParameterCustomAttributesData : assembly:System.Reflection.ParameterInfo -> System.Collections.Generic.IList<IProvidedCustomAttributeData>
-#endif
+        abstract GetGeneratedAssemblyContents : assembly:Assembly -> byte[]
 
     /// Represents additional, optional information for a type provider component
     type ITypeProvider2 =
@@ -358,4 +343,3 @@ namespace Microsoft.FSharp.Core.CompilerServices
         /// <returns>The provided method definition corresponding to the given static parameter values</returns>
         abstract ApplyStaticArgumentsForMethod : methodWithoutArguments:MethodBase * methodNameWithArguments:string * staticArguments:obj[] -> MethodBase
 
-#endif

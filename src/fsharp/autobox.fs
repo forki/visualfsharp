@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 module internal Microsoft.FSharp.Compiler.AutoBox 
 
@@ -10,14 +10,14 @@ open Microsoft.FSharp.Compiler.ErrorLogger
 open Microsoft.FSharp.Compiler.Tast
 open Microsoft.FSharp.Compiler.Tastops
 open Microsoft.FSharp.Compiler.Lib
-open Microsoft.FSharp.Compiler.Env
-open Microsoft.FSharp.Compiler.Typrelns
+open Microsoft.FSharp.Compiler.TcGlobals
+open Microsoft.FSharp.Compiler.TypeRelations
 
 //----------------------------------------------------------------------------
 // Decide the set of mutable locals to promote to heap-allocated reference cells
 
 type cenv = 
-    { g: TcGlobals; 
+    { g: TcGlobals
       amap: Import.ImportMap }
 
 /// Find all the mutable locals that escape a method, function or lambda expression
@@ -187,7 +187,7 @@ let TransformImplFile g amap implFile =
         implFile |> 
           RewriteImplFile { PreIntercept = Some(TransformExpr g nvs)
                             PreInterceptBinding = Some(TransformBinding g nvs)
-                            PostTransform= (fun _ -> None)
-                            IsUnderQuotations=false } 
+                            PostTransform = (fun _ -> None)
+                            IsUnderQuotations = false } 
 
 

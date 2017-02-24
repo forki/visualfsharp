@@ -6,10 +6,23 @@
 // Microsoft Research Ltd.
 //---------------------------------------------------------------
 
-let failures = ref false
-let report_failure () = 
-  stderr.WriteLine " NO"; failures := true
-let test s b = stderr.Write(s:string);  if b then stderr.WriteLine " OK" else report_failure() 
+#if TESTS_AS_APP
+module Core_members_factors
+#endif
+
+let failures = ref []
+
+let report_failure (s : string) = 
+    stderr.Write" NO: "
+    stderr.WriteLine s
+    failures := !failures @ [s]
+
+let test (s : string) b = 
+    stderr.Write(s)
+    if b then stderr.WriteLine " OK"
+    else report_failure (s)
+
+let check s b1 b2 = test s (b1 = b2)
 
 open System.Collections.Generic
 
@@ -27,9 +40,6 @@ end
 
 open Types
 module ResizeArray = begin
-  /// Maps a ResizeArray to another ResizeArray by application of the function f to every element.
-  let map f (r:ResizeArray<_>) : ResizeArray<_> = r.ConvertAll (fun x -> f x)
-
   /// Iterates the function f for every element of the ResizeArray.
   let iter f (r:ResizeArray<_>) = r.ForEach (fun x -> f x)
 
@@ -258,9 +268,18 @@ let Gaussian1DPriorFactorNode((var: VariableNode<Gaussian1D>), mean, variance) =
 // Finish up
 
 
-let _ = 
-  if !failures then (stdout.WriteLine "Test Failed"; exit 1) 
-  else (stdout.WriteLine "Test Passed"; 
-        System.IO.File.WriteAllText("test.ok","ok"); 
-        exit 0)
+
+#if TESTS_AS_APP
+let RUN() = !failures
+#else
+let aa =
+  match !failures with 
+  | [] -> 
+      stdout.WriteLine "Test Passed"
+      System.IO.File.WriteAllText("test.ok","ok")
+      exit 0
+  | _ -> 
+      stdout.WriteLine "Test Failed"
+      exit 1
+#endif
 

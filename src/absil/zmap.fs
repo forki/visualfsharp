@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Corporation.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 namespace Microsoft.FSharp.Compiler.AbstractIL.Internal
 
@@ -42,7 +42,6 @@ module internal Zmap =
       m.Fold (fun k v s -> match f k v with None -> s | Some x -> x::s) []
         
     let ofList m xs = List.fold (fun m (k,v) -> add k v m) (empty m) xs
-    let ofFlatList m xs = FlatList.fold (fun m (k,v) -> add k v m) (empty m) xs
 
     let keys   m = chooseL (fun k _ -> Some k) m 
     let values m = chooseL (fun _ v -> Some v) m

@@ -1,30 +1,20 @@
 // #Regression #Conformance #Sequences 
-#if Portable
+#if TESTS_AS_APP
 module Core_seq
 #endif
 
 #nowarn "62"
 #nowarn "44"
 
-let mutable failures = []
-let reportFailure s = 
-  stdout.WriteLine "\n................TEST FAILED...............\n"; failures <- failures @ [s]
+let failures = ref []
+
+let reportFailure (s : string) = 
+    stderr.Write" NO: "
+    stderr.WriteLine s
+    failures := !failures @ [s]
+
 
 (* TEST SUITE FOR STANDARD LIBRARY *)
-
-#if NetCore
-#else
-let argv = System.Environment.GetCommandLineArgs() 
-let SetCulture() = 
-  if argv.Length > 2 && argv.[1] = "--culture" then  begin
-    let cultureString = argv.[2] in 
-    let culture = new System.Globalization.CultureInfo(cultureString) in 
-    stdout.WriteLine ("Running under culture "+culture.ToString()+"...");
-    System.Threading.Thread.CurrentThread.CurrentCulture <-  culture
-  end 
-  
-do SetCulture()    
-#endif
 
 let check s e r = 
   if r = e then  stdout.WriteLine (s^": YES") 
@@ -487,14 +477,48 @@ check "hfhdfsjkfur34"
         Failure "ss!!!" -> results := "caught"::!results
     !results)
     ["caught";"ssDispose";"eDispose"]
+
+// Check https://github.com/Microsoft/visualfsharp/pull/742
+
+module Repro1 = 
+
+    let configure () =
+     let aSequence = seq { yield "" } 
+     let aString = new string('a',3)
+     for _ in aSequence do
+       System.Console.WriteLine(aString)
+
+    do configure ()
+    /// The check is that the above code compiles OK
+
+module Repro2 = 
+
+    let configure () =
+     let aSequence = Microsoft.FSharp.Core.Operators.(..) 3 4
+     let aString = new string('a',3)
+     for _ in aSequence do
+       System.Console.WriteLine(aString)
+
+    do configure ()
+    /// The check is that the above code compiles OK
+
     
 (*---------------------------------------------------------------------------
 !* wrap up
  *--------------------------------------------------------------------------- *)
 
-let aa =
-  if not failures.IsEmpty then (printfn "Test Failed, failures = %A" failures; exit 1) 
 
-do (stdout.WriteLine "Test Passed"; 
-    System.IO.File.WriteAllText("test.ok","ok"); 
-    exit 0)
+#if TESTS_AS_APP
+let RUN() = !failures
+#else
+let aa =
+  match !failures with 
+  | [] -> 
+      stdout.WriteLine "Test Passed"
+      System.IO.File.WriteAllText("test.ok","ok")
+      exit 0
+  | _ -> 
+      stdout.WriteLine "Test Failed"
+      exit 1
+#endif
+

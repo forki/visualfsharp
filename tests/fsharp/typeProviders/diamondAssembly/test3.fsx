@@ -3,22 +3,14 @@
 #r "test1.dll"
 #r "test2a.dll"
 #r "test2b.dll"
+#load "./test1.fsx"
+#load "./test2a.fsx"
+#load "./test2b.fsx"
 
 
 let mutable failures = []
 let reportFailure s = 
   stdout.WriteLine "\n................TEST FAILED...............\n"; failures <- failures @ [s]
-
-let argv = System.Environment.GetCommandLineArgs() 
-let SetCulture() = 
-  if argv.Length > 2 && argv.[1] = "--culture" then  begin
-    let cultureString = argv.[2] in 
-    let culture = new System.Globalization.CultureInfo(cultureString) in 
-    stdout.WriteLine ("Running under culture "+culture.ToString()+"...");
-    System.Threading.Thread.CurrentThread.CurrentCulture <-  culture
-  end 
-  
-do SetCulture()    
 
 let check s e r = 
   if r = e then  stdout.WriteLine (s^": YES") 

@@ -1,15 +1,23 @@
 // #Conformance #MemberDefinitions #Overloading #ComputationExpressions 
-let failures = ref false
-let report_failure () = 
-  stderr.WriteLine " NO"; failures := true
-let test s b = stderr.Write(s:string);  if b then stderr.WriteLine " OK" else report_failure() 
+#if TESTS_AS_APP
+module Core_members_ops
+#endif
 
-//let inline (>>) (x:$a) (y:$b) = (($a.(>>) <> <'a,'b,'c> : $t1<'a,'b> * $t2<'b,'c> -> $t2<'a,'c>) (x,y))
-//let inline (+) (x:$t1) (y:$t2) = (($a.(+) <...> <> : $t1<...> * $t2 -> $t1<...>) (x,y))
-//let inline (>>) (x:^a) (y:^b) : ^b = (^a.(>>) (x,y) )
-//let inline (<<) (x:^a) (y:^b) : ^a = (^a.(<<) (x,y) )
+let failures = ref []
 
-module FuncTest = begin
+let report_failure (s : string) = 
+    stderr.Write" NO: "
+    stderr.WriteLine s
+    failures := !failures @ [s]
+
+let test (s : string) b = 
+    stderr.Write(s)
+    if b then stderr.WriteLine " OK"
+    else report_failure (s)
+
+let check s b1 b2 = test s (b1 = b2)
+
+module FuncTest = 
 
     type func =
       class
@@ -27,18 +35,16 @@ module FuncTest = begin
 
     let morph f = new func(fun x -> Some (f x))
 
-    #if UNNAMED_OPS
     let something = (morph (fun x -> x * x)) >>>> (morph (fun x -> x + x))
     let something2 = (morph (fun x -> x * x)) <<<< (morph (fun x -> x + x))
 
     do test "cn39233" (something.Invoke(3) = Some 18)
     do test "cn39233b" (something2.Invoke(3) = Some 36)
-    #endif
-
-end
 
 
-module OverloadSamples = begin
+
+
+module OverloadSamples = 
 
     open System
 
@@ -59,53 +65,15 @@ module OverloadSamples = begin
     // using an augmentation to assocaite the operations with the type.  However
     // here we've just added the augmentation straight away.
 
-    type IntVector = V of int array
-      with 
+    type IntVector = 
+        | V of int array
         static member (+) (V x, V y) = 
           if x.Length <> y.Length then invalidArg "arg" "IntVectorOps.add";
           V(Array.init x.Length (fun i -> x.[i] + y.[i]))
-      end
 
     // Now use the overloading:
 
     let res6 = V [| 1;2;3 |] + V [| 3;2;1 |]
-
-    // val res6 = V [|4; 4; 4|]
-
-
-    //==============================================================================
-    // Example 7: Generic Vectors (incorrect approach)
-    //
-    // F# overloading does not propagate as far as you may wish.  In particular,
-    // overloading on generic types will often produce unsatisfying results  (extending
-    // overloading in this direction is being considered).
-    //
-    // For example, you can't create a generic vector type and have the overloading
-    // on the element type just magically propagate to the new type.
-
-    type 'a BadGenericVector = 
-      { arr: 'a array }
-      with
-         // This function is not as general as you might wish, despite the use of 
-         // the overloaded "+" operator.  Each instance of an overloaded operator
-         // must relate to one and only one type across the entire scope of
-         // type inference.  So this gives rise to an "add" function that will be
-         // used to add one as-yet-to-be-determined type of element.
-         //
-         // So this function gives rise to the error
-         //   test.ml(_,_): error: FS0001: The declared type parameter 'a cannot be used in
-         //   conjunction with this overloaded operator since the overloading cannot be 
-         //   resolved at compile time
-
-         // static member (+) ((x : 'a BadGenericVector),(y :'a BadGenericVector)) = 
-         //    if x.arr.Length <> y.arr.Length then invalidArg "Matrix.(+)";
-         //    {arr=Array.init x.arr.Length (fun i -> x.arr.[i] + y.arr.[i])}
-      end
-
-    //let BGV arr = {arr=arr}
-    // This means you cannot use these
-    //let f7a (x:BadGenericVector<int>) = x + BGV [| 1;2;3 |]
-    //let f7b (x:BadGenericVector<float>) = x + BGV [| 1.0 |]
 
     //==============================================================================
     // Example 7: Generic Vectors (correct approach)
@@ -178,10 +146,9 @@ module OverloadSamples = begin
     let f11 (x:GenericVector<int>) = twice x
 
 
-end
 
 
-module StateMonadTest = begin
+module StateMonadTest = 
 
  type 'a IO = 
     { impl: unit -> 'a }
@@ -199,22 +166,9 @@ module StateMonadTest = begin
       List.foldBack mcons  l (result [])
 
 
-//These run into problems because we don't support higher-kinded polymorphism.
-// For example we really wish to write:
-//
-//let inline result (x:'a) : ^f<'a> = (^f<'a>).Result(x)
-//let inline (>>=) (x:^f<'a>) (y:'a -> ^f<'b>) = (^f<'a>).BindOp<'b> (x,y)
 
 
-//This is ok:
-//let inline result (x:^a) : ^b = ^b.Result(x)
-//This is not enough:
-//let inline (>>>=) (x:^f) (y:'a -> ^g) = (^f.BindOp(x,y))
-
-end
-
-
-module StreamMonadTest = begin
+module StreamMonadTest = 
 
     type 'a NumberOps = 
       { zero: 'a;
@@ -239,10 +193,10 @@ module StreamMonadTest = begin
         
 
 
-end
 
 
-module AnotherFuncTest = begin
+
+module AnotherFuncTest = 
 
     type func =
       class
@@ -255,146 +209,10 @@ module AnotherFuncTest = begin
       end
      
 
-end
-
-
-(*
-module GenericFunc = begin
-
-type ('a,'b) func =
-  class
-    val numCalls: int ref
-    val impl: 'a -> 'b option
-    member x.Invoke(y) = incr x.numCalls; x.impl(y)
-    new(f) = { inherit obj(); numCalls = ref 0; impl=f }
-    static member FF (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-      new func<'a,'c>(fun x -> match f.Invoke(x) with None -> None | Some b -> g.Invoke(b))
-  end
-
-
-end
-
-module GenericFunc2 = begin
-
-type func<'a,'b> =
-  class
-    val numCalls: int ref
-    val impl: 'a -> 'b option
-
-    new(f) = { inherit obj(); numCalls = ref 0; impl=f }
-
-    static member FF (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-      new func<'a,'c>(fun x -> match f.Invoke(x) with None -> None | Some b -> g.Invoke(b))
-
-    member x.Invoke(y : 'a) : 'b option = incr x.numCalls; x.impl(y)
-  end
-
-
-end
-
-module AnotherGenericFunc = begin
-
-type func<'a,'b> =
-  class
-    abstract Invoke : 'a -> 'b option
-    static member FF (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-      {new func<'a,'c>() with Invoke(x) = match f.Invoke(x) with None -> None | Some b -> g.Invoke(b)}
-    // FEATURE REQUEST: inherit should never be needed for base classes that have a default constructor and no other
-    // constructors
-    new() = { }
-  end
-
-let konst a = {new func<_,_>() with Invoke(x) = Some a}
-
-let morph f = {new func<_,_>() with Invoke(x) = Some (f x)}
-
-let something = func.FF (morph (fun x -> x * x)) (morph (fun x -> x + x))
-
-end
-
-
-module UsingPolymorphicRecursion1 = begin
-
-type func<'a,'b> = { impl : 'a -> 'b option }
-
-let invoke<'a,'b,..> (f:func<'a,'b>) x = f.impl x 
-
-let rec invoke2<'a,..> (f:func<'a,'b>) x = f.impl x 
-and compose (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-     {impl=(fun x -> match invoke f x with None -> None | Some b -> invoke g b)}
-
-
-end
-
-module UsingPolymorphicRecursion2 = begin
-
-type func<'a,'b> = { impl : 'a -> 'b option }
-
-let invoke<'a,'b> (f:func<'a,'b>) x = f.impl x 
-
-let rec invoke2<'a,..> (f:func<'a,'b>) x = f.impl x 
-and compose (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-     {impl=(fun x -> match invoke f x with None -> None | Some b -> invoke g b)}
-
-
-end
-
-
-module UsingPolymorphicRecursion3 = begin
-
-type func<'a,'b> = { impl : 'a -> 'b option }
-
-let invoke<'a,..> (f:func<'a,'b>) x = f.impl x 
-
-let rec invoke2<'a,..> (f:func<'a,'b>) x = f.impl x 
-and compose (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-     {impl=(fun x -> match invoke f x with None -> None | Some b -> invoke g b)}
-
-
-end
-
-module UsingPolymorphicRecursion4 = begin
-
-type func<'a,'b> = { impl : 'a -> 'b option }
-
-let invoke< .. > (f:func<'a,'b>) x = f.impl x 
-
-let rec invoke2<'a,..> (f:func<'a,'b>) x = f.impl x 
-and compose (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-     {impl=(fun x -> match invoke f x with None -> None | Some b -> invoke g b)}
-
-
-end
-
-module UsingPolymorphicRecursion5 = begin
-
-type func<'a,'b> = { impl : 'a -> 'b option }
-
-let rec invoke2<'a,'b,..> (f:func<'a,'b>) x = f.impl x 
-and compose (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-     {impl=(fun x -> match invoke2 f x with None -> None | Some b -> invoke2 g b)}
-
-
-end
-
-module UsingPolymorphicRecursion6 = begin
-
-type func<'a,'b> = { impl : 'a -> 'b option }
-
-let rec invoke2<'a,'b> (f:func<'a,'b>) x = f.impl x 
-and compose (f: func<'a,'b>)  (g: func<'b,'c>)  = 
-     {impl=(fun x -> match invoke2 f x with None -> None | Some b -> invoke2 g b)}
-
-
-end
-*)
 
 
 
-
-open Microsoft.FSharp.Math
-
-module BasicOverloadTests = begin
+module BasicOverloadTests = 
 
     let f4 x = 1 + x
 
@@ -450,10 +268,10 @@ module BasicOverloadTests = begin
     let f30 x = 
         let g x = x + "a" in
         g x + "3"
-end
+
 
     
-module SubtypingAndOperatorOverloads = begin
+module SubtypingAndOperatorOverloads = 
     type C() =
         class
             static member (+) (x:C,y:C) = new C()
@@ -488,9 +306,9 @@ module SubtypingAndOperatorOverloads = begin
     let f307 (x1: D) (x2: _) = x1 + x2
     // TODO: investigate
     let f308 (x1: _) (x2: D) = x1 + x2
-end
+
     
-module OperatorOverloadsWithFloat = begin
+module OperatorOverloadsWithFloat = 
     type C() =
         class
             static member (+) (x:C,y:float) = new C()
@@ -520,12 +338,10 @@ module OperatorOverloadsWithFloat = begin
     // TODO: investigate
     let f306 (x1: _) (x2: C)         = x1 + x2
 
-end
+
     
 
-//let f3 (a:matrix) (b:string) = a * b
-
-module MiscOperatorOverloadTests = begin
+module MiscOperatorOverloadTests = 
 
     let rec findBounding2Power b tp = if b<=tp then tp else findBounding2Power b (tp*2) 
     let leastBounding2Power b =
@@ -538,17 +354,23 @@ module MiscOperatorOverloadTests = begin
         done;
         res
 
-end
 
+// See https://github.com/Microsoft/visualfsharp/issues/1306
+module OperatorConstraintsWithExplicitRigidTypeParameters = 
+    type M() = class end
 
-module EnumerationOperatorTests = begin
+    let inline empty< ^R when ( ^R or  M) : (static member ( $ ) :  ^R *  M ->  ^R)> =        
+        let m = M()
+        Unchecked.defaultof< ^R> $ m: ^R
+
+module EnumerationOperatorTests = 
     let x1 : System.DateTimeKind =  enum 3
     let x2 : System.DateTimeKind =  enum<_> 3
     let x3 =  enum<System.DateTimeKind> 3
     let x4 =  int32 (enum<System.DateTimeKind> 3)
     let inline f5 x = x |> int32 |> enum
 
-end
+
 
 module TraitCallsAndConstructors = 
     open System
@@ -568,10 +390,36 @@ module TraitCallsAndConstructors =
      
     let _ : Inherited = -aInherited
 
+module CodeGenTraitCallWitnessesNotBeingInlined = 
+    // From: http://stackoverflow.com/questions/28243963/how-to-write-a-variadic-function-in-f-emulating-a-similar-haskell-solution/28244413#28244413
+    type T = T with
+        static member        ($) (T, _:int    ) = (+)
+        static member        ($) (T, _:decimal) = (+)       // required, if only the prev line is here, type inference will constrain too much
 
-let _ = 
-  if !failures then (stdout.WriteLine "Test Failed"; exit 1) 
-  else (stdout.WriteLine "Test Passed"; 
-        System.IO.File.WriteAllText("test.ok","ok"); 
-        exit 0)
+    [<AutoOpen>]
+    module TestT =
+        let inline sum (i:'a) (x:'a) :'r = (T $ Unchecked.defaultof<'r>) i x
+
+    type T with
+        static member inline ($) (T, _:'t-> 'rest) = fun (a:'t) x -> sum  (x + a)
+
+    module TestT2 =
+        let x:int = sum 2 3 
+        let y:int = sum 2 3 4       // this line was throwing TypeInitializationException in Debug build
+
+
+
+#if TESTS_AS_APP
+let RUN() = !failures
+#else
+let aa =
+  match !failures with 
+  | [] -> 
+      stdout.WriteLine "Test Passed"
+      System.IO.File.WriteAllText("test.ok","ok")
+      exit 0
+  | _ -> 
+      stdout.WriteLine "Test Failed"
+      exit 1
+#endif
 
