@@ -3197,9 +3197,10 @@ let GetErrorLoggerFilteringByScopedPragmas(checkFile,scopedPragmas,errorLogger) 
 //--------------------------------------------------------------------------
 
 
-let CanonicalizeFilename filename = 
-    let basic = fileNameOfPath filename
-    String.capitalize (try Filename.chopExtension basic with _ -> basic)
+let CanonicalizeFilename filename =
+    let filename = try Filename.chopExtension filename with _ -> filename
+    let parts = System.IO.Path.GetFullPath(filename).Replace('\\','/').Split('/').[1..]
+    parts |> Array.map String.capitalize |> String.concat "."
 
 let IsScript filename = 
     let lower = String.lowercase filename 
@@ -5101,10 +5102,7 @@ type RootSigs =  Zmap<QualifiedNameOfFile, ModuleOrNamespaceType>
 type RootImpls = Zset<QualifiedNameOfFile >
 type TypecheckerSigsAndImpls = RootSigsAndImpls of RootSigs * RootImpls * ModuleOrNamespaceType * ModuleOrNamespaceType
 
-let qnameOrder = 
-    Order.orderBy (fun (q:QualifiedNameOfFile) -> 
-        let res = Path.ChangeExtension(Path.GetFullPath(q.Range.FileName).Replace("\\", "/"), null)
-        if String.IsNullOrWhiteSpace res then q.Text else res)
+let qnameOrder = Order.orderBy (fun (q:QualifiedNameOfFile) -> q.Text)
 
 type TcState = 
     { tcsCcu: CcuThunk
