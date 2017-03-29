@@ -3197,10 +3197,18 @@ let GetErrorLoggerFilteringByScopedPragmas(checkFile,scopedPragmas,errorLogger) 
 //--------------------------------------------------------------------------
 
 
-let CanonicalizeFilename filename =
-    let filename = try Filename.chopExtension filename with _ -> filename
-    let parts = System.IO.Path.GetFullPath(filename).Replace('\\','/').Split('/').[1..]
-    parts |> Array.map String.capitalize |> String.concat "."
+let CanonicalizeFilename =
+    let cache = System.Collections.Generic.HashSet<_>()
+    let preventConflicts conflicts name =
+        let rec check n =
+            let name = if n > 0 then name + "_" + (string n) else name
+            if not (conflicts name) then name else check (n+1)
+        check 0
+    fun filename ->
+        let basic = fileNameOfPath filename
+        let id = String.capitalize (try Filename.chopExtension basic with _ -> basic) |> preventConflicts cache.Contains
+        cache.Add(id) |> ignore
+        id
 
 let IsScript filename = 
     let lower = String.lowercase filename 
