@@ -5102,14 +5102,11 @@ type RootImpls = Zset<QualifiedNameOfFile >
 type TypecheckerSigsAndImpls = RootSigsAndImpls of RootSigs * RootImpls * ModuleOrNamespaceType * ModuleOrNamespaceType
 
 let qnameOrder =
-    { new IComparer<_> with 
-        member __.Compare(q1:QualifiedNameOfFile,q2:QualifiedNameOfFile) =
-            try
-                match compare q1.Text q2.Text with
-                | 0 -> compare q1.Range.FileName q2.Range.FileName
-                | i -> i
-            with
-            | _ -> -1 }
+    Order.orderBy (fun (q:QualifiedNameOfFile) -> 
+        let fileName = q.Range.FileName
+        if String.IsNullOrWhiteSpace fileName then q.Text else
+        let res = Path.ChangeExtension(Path.GetFullPath(q.Range.FileName).Replace("\\", "/"), "")
+        if String.IsNullOrWhiteSpace res then q.Text else res)
 
 type TcState = 
     { tcsCcu: CcuThunk
