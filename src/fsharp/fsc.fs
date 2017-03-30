@@ -1572,22 +1572,23 @@ let ValidateKeySigningAttributes (tcConfig : TcConfig, tcGlobals, topAttrs) =
     StrongNameSigningInfo (delaysign, tcConfig.publicsign, signer, container)
 
 let GetStrongNameSigner signingInfo = 
-        let (StrongNameSigningInfo(delaysign, publicsign, signer, container)) = signingInfo
-        // REVIEW: favor the container over the key file - C# appears to do this
-        if Option.isSome container then
-          Some (ILBinaryWriter.ILStrongNameSigner.OpenKeyContainer container.Value)
-        else
-            match signer with 
-            | None -> None
-            | Some s ->
-                try 
-                if publicsign || delaysign then
-                    Some (ILBinaryWriter.ILStrongNameSigner.OpenPublicKeyOptions s publicsign)
-                else
-                    Some (ILBinaryWriter.ILStrongNameSigner.OpenKeyPairFile s) 
-                with e -> 
-                    // Note:: don't use errorR here since we really want to fail and not produce a binary
-                    error(Error(FSComp.SR.fscKeyFileCouldNotBeOpened(s), rangeCmdArgs))
+    let (StrongNameSigningInfo(delaysign, publicsign, signer, container)) = signingInfo
+    // REVIEW: favor the container over the key file - C# appears to do this
+    match container with
+    | Some container ->
+        Some (ILBinaryWriter.ILStrongNameSigner.OpenKeyContainer container)
+    | None ->
+        match signer with 
+        | None -> None
+        | Some s ->
+            try 
+            if publicsign || delaysign then
+                Some (ILBinaryWriter.ILStrongNameSigner.OpenPublicKeyOptions s publicsign)
+            else
+                Some (ILBinaryWriter.ILStrongNameSigner.OpenKeyPairFile s) 
+            with e -> 
+                // Note:: don't use errorR here since we really want to fail and not produce a binary
+                error(Error(FSComp.SR.fscKeyFileCouldNotBeOpened(s), rangeCmdArgs))
 
 //----------------------------------------------------------------------------
 // CopyFSharpCore
@@ -1827,22 +1828,20 @@ let main1(Args (ctok, tcGlobals, tcImports: TcImports, frameworkTcImports, gener
         | _ -> None
 
     // write interface, xmldoc
-    begin
-      ReportTime tcConfig ("Write Interface File")
-      use unwindBuildPhase = PushThreadBuildPhaseUntilUnwind BuildPhase.Output
-      if tcConfig.printSignature   then InterfaceFileWriter.WriteInterfaceFile (tcGlobals, tcConfig, InfoReader(tcGlobals, tcImports.GetImportMap()), typedImplFiles)
+    ReportTime tcConfig ("Write Interface File")
+    use unwindBuildPhase = PushThreadBuildPhaseUntilUnwind BuildPhase.Output
+    if tcConfig.printSignature   then InterfaceFileWriter.WriteInterfaceFile (tcGlobals, tcConfig, InfoReader(tcGlobals, tcImports.GetImportMap()), typedImplFiles)
 
-      ReportTime tcConfig ("Write XML document signatures")
-      if tcConfig.xmlDocOutputFile.IsSome then 
-          XmlDocWriter.computeXmlDocSigs (tcGlobals, generatedCcu) 
+    ReportTime tcConfig ("Write XML document signatures")
+    if tcConfig.xmlDocOutputFile.IsSome then 
+        XmlDocWriter.computeXmlDocSigs (tcGlobals, generatedCcu) 
 
-      ReportTime tcConfig ("Write XML docs")
-      tcConfig.xmlDocOutputFile |> Option.iter ( fun xmlFile -> 
-          let xmlFile = tcConfig.MakePathAbsolute xmlFile
-          XmlDocWriter.writeXmlDoc (assemblyName, generatedCcu, xmlFile)
-        )
-      ReportTime tcConfig ("Write HTML docs")
-    end
+    ReportTime tcConfig ("Write XML docs")
+    tcConfig.xmlDocOutputFile |> Option.iter ( fun xmlFile -> 
+        let xmlFile = tcConfig.MakePathAbsolute xmlFile
+        XmlDocWriter.writeXmlDoc (assemblyName, generatedCcu, xmlFile)
+      )
+    ReportTime tcConfig ("Write HTML docs")
 
     // Pass on only the minimum information required for the next phase
     Args (ctok, tcConfig, tcImports, frameworkTcImports, tcGlobals, errorLogger, generatedCcu, outfile, typedImplFiles, topAttrs, pdbfile, assemblyName, assemVerFromAttrib, signingInfo, exiter)
@@ -1922,7 +1921,8 @@ let main3(Args (ctok, tcConfig, errorLogger: ErrorLogger, staticLinker, ilGlobal
 
     // Static linking, if any
     let ilxMainModule =  
-        try  staticLinker ilxMainModule
+        try
+            staticLinker ilxMainModule
         with e -> 
             errorRecoveryNoRange e
             exiter.Exit 1
@@ -1941,30 +1941,28 @@ let main4 (Args (ctok, tcConfig, errorLogger: ErrorLogger, ilGlobals, ilxMainMod
     DoesNotRequireCompilerThreadTokenAndCouldPossiblyBeMadeConcurrent  ctok
 
     let pdbfile = pdbfile |> Option.map (tcConfig.MakePathAbsolute >> Path.GetFullPath)
-    begin
-        try
-            try 
-                ILBinaryWriter.WriteILBinary 
-                 (outfile, 
-                  { ilg = ilGlobals
-                    pdbfile=pdbfile
-                    emitTailcalls = tcConfig.emitTailcalls
-                    showTimes = tcConfig.showTimes
-                    portablePDB = tcConfig.portablePDB
-                    embeddedPDB = tcConfig.embeddedPDB
-                    embedAllSource = tcConfig.embedAllSource
-                    embedSourceList = tcConfig.embedSourceList
-                    sourceLink = tcConfig.sourceLink
-                    signer = GetStrongNameSigner signingInfo
-                    fixupOverlappingSequencePoints = false
-                    dumpDebugInfo = tcConfig.dumpDebugInfo }, 
-                  ilxMainModule)
-            with Failure msg -> 
-                error(Error(FSComp.SR.fscProblemWritingBinary(outfile, msg), rangeCmdArgs))
-        with e -> 
-            errorRecoveryNoRange e
-            exiter.Exit 1 
-    end
+    try
+        try 
+            ILBinaryWriter.WriteILBinary 
+                (outfile, 
+                { ilg = ilGlobals
+                  pdbfile = pdbfile
+                  emitTailcalls = tcConfig.emitTailcalls
+                  showTimes = tcConfig.showTimes
+                  portablePDB = tcConfig.portablePDB
+                  embeddedPDB = tcConfig.embeddedPDB
+                  embedAllSource = tcConfig.embedAllSource
+                  embedSourceList = tcConfig.embedSourceList
+                  sourceLink = tcConfig.sourceLink
+                  signer = GetStrongNameSigner signingInfo
+                  fixupOverlappingSequencePoints = false
+                  dumpDebugInfo = tcConfig.dumpDebugInfo }, 
+                ilxMainModule)
+        with Failure msg -> 
+            error(Error(FSComp.SR.fscProblemWritingBinary(outfile, msg), rangeCmdArgs))
+    with e -> 
+        errorRecoveryNoRange e
+        exiter.Exit 1 
     AbortOnError(errorLogger, exiter)
 
     // Don't copy referenced FSharp.core.dll if we are building FSharp.Core.dll

@@ -777,7 +777,7 @@ module CoreTests =
 
     // Repro for https://github.com/Microsoft/visualfsharp/issues/2679
     [<Test>]
-    let samename () = 
+    let ``add files with same name from different folders`` () = 
         let cfg = testConfig "core/samename"
 
         log "== Compiling F# Code with files with same name in different folders"

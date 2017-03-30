@@ -471,7 +471,8 @@ type MetadataTable<'T> =
         t |> Array.iteri (fun i x -> h.[x] <- (i+1))
 
     member tbl.AddUniqueEntry nm geterr x =
-        if tbl.dict.ContainsKey x then failwith ("duplicate entry '"+geterr x+"' in "+nm+" table")
+        if tbl.dict.ContainsKey x then 
+            failwith ("duplicate entry '" + geterr x + "' in " + nm + " table")
         else tbl.AddSharedEntry x
 
     member tbl.GetTableEntry x = tbl.dict.[x] 
@@ -3547,7 +3548,7 @@ let writeBinaryAndReportMappings (outfile, ilg: ILGlobals, pdbfile: string optio
     // Store the public key from the signer into the manifest.  This means it will be written 
     // to the binary and also acts as an indicator to leave space for delay sign 
 
-    reportTime showTimes "Write Started";
+    reportTime showTimes "Write Started"
     let isDll = modul.IsDLL
     
     let signer = 
@@ -3574,12 +3575,12 @@ let writeBinaryAndReportMappings (outfile, ilg: ILGlobals, pdbfile: string optio
              with e ->     
                failwith ("A call to StrongNameGetPublicKey failed ("+e.Message+")"); 
                None
-        begin match modul.Manifest with 
+        match modul.Manifest with 
         | None -> () 
         | Some m -> 
            if m.PublicKey <> None && m.PublicKey <> pubkey then 
              dprintn "Warning: The output assembly is being signed or delay-signed with a strong name that is different to the original."
-        end;
+
         { modul with Manifest = match modul.Manifest with None -> None | Some m -> Some {m with PublicKey = pubkey} }
 
     let os = 
