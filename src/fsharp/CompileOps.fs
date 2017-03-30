@@ -5106,7 +5106,7 @@ let qnameOrder =
         let fileName = q.Range.FileName
         if String.IsNullOrWhiteSpace fileName then q.Text else
         let path = Path.ChangeExtension(Path.GetFullPath(fileName).Replace("\\", "/"), "")
-        if String.IsNullOrWhiteSpace path then q.Text else path)
+        q.Text + path)
 
 type TcState = 
     { tcsCcu: CcuThunk
