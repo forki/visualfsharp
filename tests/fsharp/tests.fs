@@ -774,6 +774,18 @@ module CoreTests =
         peverify cfg "test2.exe"
 
         exec cfg ("." ++ "test2.exe") ""
+
+    // Repro for https://github.com/Microsoft/visualfsharp/issues/2679
+    [<Test>]
+    let samename () = 
+        let cfg = testConfig "core/samename"
+
+        log "== Compiling F# Code with files with same name in different folders"
+        fsc cfg "%s -o:test.exe" cfg.fsc_flags ["folder1/a.fs"; "folder1/b.fs"; "folder2/a.fs"; "folder2/b.fs"]
+
+        peverify cfg "test.exe"
+
+        exec cfg ("." ++ "test.exe") ""
  
     [<Test>]
     let ``libtest-FSI_STDIN`` () = singleTestBuildAndRun "core/libtest" FSI_STDIN
