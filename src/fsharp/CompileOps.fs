@@ -5104,9 +5104,12 @@ type TypecheckerSigsAndImpls = RootSigsAndImpls of RootSigs * RootImpls * Module
 let qnameOrder =
     { new IComparer<_> with 
         member __.Compare(q1:QualifiedNameOfFile,q2:QualifiedNameOfFile) =
-            match compare q1.Text q2.Text with
-            | 0 -> compare q1.Range.FileName q2.Range.FileName
-            | i -> i }
+            try
+                match compare q1.Text q2.Text with
+                | 0 -> compare q1.Range.FileName q2.Range.FileName
+                | i -> i
+            with
+            | _ -> -1 }
 
 type TcState = 
     { tcsCcu: CcuThunk
