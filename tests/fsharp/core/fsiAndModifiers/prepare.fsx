@@ -31,4 +31,7 @@ try
 
     asmBuilder.Save(filename)
     exit 0
-with _ -> exit 1
+with 
+| exn ->
+    printfn "Preparation failed: %s" exn.Message
+    exit 1
