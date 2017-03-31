@@ -1779,7 +1779,7 @@ let main0(ctok, argv, referenceResolver, bannerAlreadyPrinted, exiter:Exiter, er
                     let input = ParsedInput.ImplFile(ParsedImplFileInput.ParsedImplFileInput(fileName,isScript,qualifiedNameOfFile,scopedPragmas,hashDirectives,modules,(isLastCompiland,isExe)))
                     input,x
                 | _ ->
-                    seen.Add(qualifiedNameOfFile.Text,0)
+                    seen.Add(qualifiedNameOfFile.Text,1)
                     input,x
             | _ -> input,x)
 
