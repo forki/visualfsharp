@@ -303,7 +303,7 @@ module InterfaceFileWriter =
             fprintfn os "#light" 
             fprintfn os "" 
 
-        for (TImplFile(_, _, mexpr, _, _)) in declaredImpls do
+        for (TImplFile(_fileName, _, _, mexpr, _, _)) in declaredImpls do
             let denv = BuildInitialDisplayEnvForSigFileGeneration tcGlobals
             writeViaBufferWithEnvironmentNewLines os (fun os s -> Printf.bprintf os "%s\n\n" s)
               (NicePrint.layoutInferredSigOfModuleExpr true denv infoReader AccessibleFromSomewhere range0 mexpr |> Layout.squashTo 80 |> Layout.showL)
@@ -1762,6 +1762,26 @@ let main0(ctok, argv, referenceResolver, bannerAlreadyPrinted, exiter:Exiter, er
         with e -> 
             errorRecoveryNoRange e
             exiter.Exit 1
+    
+    let inputs =
+        // Deduplicate module names
+        let seen = Dictionary<_,_>()
+        inputs
+        |> List.map (fun (input,x) -> 
+            match input with
+            | ParsedInput.ImplFile (ParsedImplFileInput.ParsedImplFileInput(fileName,isScript,qualifiedNameOfFile,scopedPragmas,hashDirectives,modules,(isLastCompiland,isExe))) ->
+                match seen.TryGetValue qualifiedNameOfFile.Text with
+                | true, count ->
+                    let count = count + 1
+                    seen.[qualifiedNameOfFile.Text] <- count
+                    let id = qualifiedNameOfFile.Id
+                    let qualifiedNameOfFile = QualifiedNameOfFile(Ident(id.idText + "___" + count.ToString(),id.idRange))
+                    let input = ParsedInput.ImplFile(ParsedImplFileInput.ParsedImplFileInput(fileName,isScript,qualifiedNameOfFile,scopedPragmas,hashDirectives,modules,(isLastCompiland,isExe)))
+                    input,x
+                | _ ->
+                    seen.Add(qualifiedNameOfFile.Text,0)
+                    input,x
+            | _ -> input,x)
 
     if tcConfig.parseOnly then exiter.Exit 0 
     if not tcConfig.continueAfterParseFailure then 
@@ -1813,7 +1833,7 @@ let main1(Args (ctok, tcGlobals, tcImports: TcImports, frameworkTcImports, gener
     // it as the updated global error logger and never remove it
     let oldLogger = errorLogger
     let errorLogger = 
-        let scopedPragmas = [ for (TImplFile(_, pragmas, _, _, _)) in typedImplFiles do yield! pragmas ]
+        let scopedPragmas = [ for (TImplFile(_fileName, _, pragmas, _, _, _)) in typedImplFiles do yield! pragmas ]
         GetErrorLoggerFilteringByScopedPragmas(true, scopedPragmas, oldLogger)
 
     let _unwindEL_3 = PushErrorLoggerPhaseUntilUnwind(fun _ -> errorLogger)

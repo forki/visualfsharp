@@ -1502,9 +1502,17 @@ type ScopedPragma =
 [<NoEquality; NoComparison>]
 type QualifiedNameOfFile =
     | QualifiedNameOfFile of Ident
-    member x.Text = (let (QualifiedNameOfFile t) = x in t.idText)
-    member x.Id = (let (QualifiedNameOfFile t) = x in t)
-    member x.Range = (let (QualifiedNameOfFile t) = x in t.idRange)
+    member x.Text =
+        let (QualifiedNameOfFile t) = x
+        t.idText
+
+    member x.Id =
+        let (QualifiedNameOfFile t) = x
+        t
+
+    member x.Range = 
+        let (QualifiedNameOfFile t) = x
+        t.idRange
 
 [<NoEquality; NoComparison>]
 type ParsedImplFileInput =

@@ -5101,12 +5101,7 @@ type RootSigs =  Zmap<QualifiedNameOfFile, ModuleOrNamespaceType>
 type RootImpls = Zset<QualifiedNameOfFile >
 type TypecheckerSigsAndImpls = RootSigsAndImpls of RootSigs * RootImpls * ModuleOrNamespaceType * ModuleOrNamespaceType
 
-let qnameOrder =
-    Order.orderBy (fun (q:QualifiedNameOfFile) -> 
-        let fileName = q.Range.FileName
-        if String.IsNullOrWhiteSpace fileName then q.Text else
-        let path = Path.ChangeExtension(Path.GetFullPath(fileName).Replace("\\", "/"), "")
-        q.Text + path)
+let qnameOrder = Order.orderBy (fun (q:QualifiedNameOfFile) -> q.Text)
 
 type TcState = 
     { tcsCcu: CcuThunk
@@ -5214,22 +5209,22 @@ let TypeCheckOneInputEventually
                 let res = (EmptyTopAttrs, [], tcEnvAtEnd, tcEnv, tcState.tcsTcImplEnv, RootSigsAndImpls(rootSigs, rootImpls, allSigModulTyp, allImplementedSigModulTyp), tcState.tcsCcuType)
                 return res
 
-            | ParsedInput.ImplFile (ParsedImplFileInput(filename,_,qualNameOfFile,_,_,_,_) as file) ->
+            | ParsedInput.ImplFile (ParsedImplFileInput(fileName,_,qualNameOfFile,_,_,_,_) as file) ->
             
                 // Check if we've got an interface for this fragment 
                 let rootSigOpt = rootSigs.TryFind(qualNameOfFile)
 
-                if verbose then dprintf "ParsedInput.ImplFile, nm = %s, qualNameOfFile = %s, ?rootSigOpt = %b\n" filename qualNameOfFile.Text (Option.isSome rootSigOpt)
+                if verbose then dprintf "ParsedInput.ImplFile, nm = %s, qualNameOfFile = %s, ?rootSigOpt = %b\n" fileName qualNameOfFile.Text (Option.isSome rootSigOpt)
 
                 // Check if we've already seen an implementation for this fragment 
                 if Zset.contains qualNameOfFile rootImpls then 
-                  errorR(Error(FSComp.SR.buildImplementationAlreadyGiven(qualNameOfFile.Text),m))
+                    errorR(Error(FSComp.SR.buildImplementationAlreadyGiven(qualNameOfFile.Text),m))
 
                 let tcImplEnv = tcState.tcsTcImplEnv
 
                 // Typecheck the implementation file 
                 let! topAttrs,implFile,tcEnvAtEnd = 
-                    TypeCheckOneImplFile  (tcGlobals,tcState.tcsNiceNameGen,amap,tcState.tcsCcu,checkForErrors,tcConfig.conditionalCompilationDefines,tcSink) tcImplEnv rootSigOpt file
+                    TypeCheckOneImplFile (tcGlobals,tcState.tcsNiceNameGen,amap,tcState.tcsCcu,checkForErrors,tcConfig.conditionalCompilationDefines,tcSink) tcImplEnv rootSigOpt file
 
                 let hadSig = Option.isSome rootSigOpt
                 let implFileSigType = SigTypeOfImplFile implFile
@@ -5286,7 +5281,7 @@ let TypeCheckOneInputEventually
  }
 
 /// Typecheck a single file (or interactive entry into F# Interactive)
-let TypeCheckOneInput (ctok, checkForErrors, tcConfig, tcImports, tcGlobals, prefixPathOpt) tcState  inp =
+let TypeCheckOneInput (ctok, checkForErrors, tcConfig, tcImports, tcGlobals, prefixPathOpt) tcState inp =
     // 'use' ensures that the warning handler is restored at the end
     use unwindEL = PushErrorLoggerPhaseUntilUnwind(fun oldLogger -> GetErrorLoggerFilteringByScopedPragmas(false,GetScopedPragmasForInput(inp),oldLogger) )
     use unwindBP = PushThreadBuildPhaseUntilUnwind BuildPhase.TypeCheck
@@ -5300,13 +5295,16 @@ let TypeCheckMultipleInputsFinish(results,tcState: TcState) =
     let topAttrs = List.foldBack CombineTopAttrs topAttrs EmptyTopAttrs
     let mimpls = List.concat mimpls
     // This is the environment required by fsi.exe when incrementally adding definitions 
-    let tcEnvAtEndOfLastFile = (match tcEnvsAtEndFile with h :: _ -> h | _ -> tcState.TcEnvFromSignatures)
+    let tcEnvAtEndOfLastFile =
+        match tcEnvsAtEndFile with 
+        | h :: _ -> h 
+        | _ -> tcState.TcEnvFromSignatures
     
     (tcEnvAtEndOfLastFile,topAttrs,mimpls),tcState
 
 /// Check multiple files (or one interactive entry into F# Interactive)
 let TypeCheckMultipleInputs (ctok, checkForErrors, tcConfig: TcConfig, tcImports, tcGlobals, prefixPathOpt, tcState, inputs) =
-    let results,tcState =  (tcState, inputs) ||> List.mapFold (TypeCheckOneInput (ctok, checkForErrors, tcConfig, tcImports, tcGlobals, prefixPathOpt)) 
+    let results,tcState = (tcState, inputs) ||> List.mapFold (TypeCheckOneInput (ctok, checkForErrors, tcConfig, tcImports, tcGlobals, prefixPathOpt)) 
     TypeCheckMultipleInputsFinish(results,tcState)
 
 let TypeCheckOneInputAndFinishEventually(checkForErrors, tcConfig: TcConfig, tcImports, tcGlobals, prefixPathOpt, tcSink, tcState, input) =

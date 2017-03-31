@@ -16850,7 +16850,7 @@ let TypeCheckOneImplFile
        (g, niceNameGen, amap, topCcu, checkForErrors, conditionalDefines, tcSink) 
        env 
        (rootSigOpt : ModuleOrNamespaceType option)
-       (ParsedImplFileInput(_,isScript,qualNameOfFile,scopedPragmas,_,implFileFrags,isLastCompiland)) =
+       (ParsedImplFileInput(fileName,isScript,qualNameOfFile,scopedPragmas,_,implFileFrags,isLastCompiland)) =
 
  eventually {
     let cenv = cenv.Create (g, isScript, niceNameGen, amap, topCcu, false, Option.isSome rootSigOpt, conditionalDefines, tcSink, (LightweightTcValForUsingInBuildMethodCall g))    
@@ -16885,8 +16885,11 @@ let TypeCheckOneImplFile
     // NOTE: this is not a great technique if inner signatures are permitted to hide 
     // virtual dispatch slots. 
     conditionallySuppressErrorReporting (checkForErrors()) (fun () ->
-        try implFileTypePriorToSig |> IterTyconsOfModuleOrNamespaceType (FinalTypeDefinitionChecksAtEndOfInferenceScope (cenv.infoReader, envAtEnd.NameEnv, cenv.tcSink, true, denvAtEnd))
-        with e -> errorRecovery e m)
+        try 
+            implFileTypePriorToSig 
+            |> IterTyconsOfModuleOrNamespaceType (FinalTypeDefinitionChecksAtEndOfInferenceScope (cenv.infoReader, envAtEnd.NameEnv, cenv.tcSink, true, denvAtEnd))
+        with 
+        | e -> errorRecovery e m)
 
     // Check the value restriction. Only checked if there is no signature.
     conditionallySuppressErrorReporting (checkForErrors()) (fun () ->
@@ -16922,7 +16925,7 @@ let TypeCheckOneImplFile
                 errorRecovery e m
                 false)
 
-    let implFile = TImplFile(qualNameOfFile,scopedPragmas, implFileExprAfterSig, hasExplicitEntryPoint,isScript)
+    let implFile = TImplFile(fileName, qualNameOfFile, scopedPragmas, implFileExprAfterSig, hasExplicitEntryPoint,isScript)
 
     return (topAttrs,implFile,envAtEnd)
  } 

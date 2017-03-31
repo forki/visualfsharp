@@ -1000,7 +1000,7 @@ and AddBindingsForModuleTopVals _g allocVal _cloc eenv vs =
 let AddIncrementalLocalAssemblyFragmentToIlxGenEnv (amap:ImportMap, isIncrementalFragment, g, ccu, fragName, intraAssemblyInfo, eenv, typedImplFiles) = 
     let cloc = CompLocForFragment fragName ccu
     let allocVal = ComputeAndAddStorageForLocalTopVal (amap, g, intraAssemblyInfo, true, NoShadowLocal)
-    (eenv, typedImplFiles) ||> List.fold (fun eenv (TImplFile(qname,_,mexpr,_,_)) -> 
+    (eenv, typedImplFiles) ||> List.fold (fun eenv (TImplFile(_fileName, qname,_,mexpr,_,_)) -> 
         let cloc = { cloc with clocTopImplQualifiedName = qname.Text }
         if isIncrementalFragment then 
             match mexpr with
@@ -5823,7 +5823,7 @@ and GenModuleBinding cenv (cgbuf:CodeGenBuffer) (qname:QualifiedNameOfFile) lazy
 
 
 /// Generate the namespace fragments in a single file
-and GenTopImpl cenv mgbuf mainInfoOpt eenv (TImplFile(qname, _, mexpr, hasExplicitEntryPoint, isScript), optimizeDuringCodeGen)  =
+and GenTopImpl cenv mgbuf mainInfoOpt eenv (TImplFile(_fileName, qname, _, mexpr, hasExplicitEntryPoint, isScript), optimizeDuringCodeGen)  =
     let eenv = {eenv with cloc = { eenv.cloc with clocTopImplQualifiedName = qname.Text } }
 
     cenv.optimizeDuringCodeGen <- optimizeDuringCodeGen
@@ -6803,11 +6803,11 @@ and GenExnDef cenv mgbuf eenv m (exnc:Tycon) =
 
 
 let CodegenAssembly cenv eenv mgbuf fileImpls = 
-    if List.length fileImpls > 0 then 
-      let a,b = List.frontAndBack fileImpls
-      let eenv = List.fold (GenTopImpl cenv mgbuf None) eenv a
-      let _eenv = GenTopImpl cenv mgbuf cenv.opts.mainMethodInfo eenv b
-      mgbuf.AddInitializeScriptsInOrderToEntryPoint()
+    if not (isNil fileImpls) then 
+        let a,b = List.frontAndBack fileImpls
+        let eenv = List.fold (GenTopImpl cenv mgbuf None) eenv a
+        let _eenv = GenTopImpl cenv mgbuf cenv.opts.mainMethodInfo eenv b
+        mgbuf.AddInitializeScriptsInOrderToEntryPoint()
 
 //-------------------------------------------------------------------------
 // When generating a module we just write into mutable 

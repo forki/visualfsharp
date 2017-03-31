@@ -3478,7 +3478,7 @@ module DebugPrint = begin
         let z = z --- sepL(tagText "`") --- (spaceListL (List.map atomL args))
         z
        
-    and implFileL (TImplFile(_,_,e,_,_)) =
+    and implFileL (TImplFile(_,_,_,e,_,_)) =
         aboveListL [(wordL(tagText "top implementation ")) @@-- mexprL e]
 
     and mexprL x =
@@ -3555,7 +3555,7 @@ end
 //--------------------------------------------------------------------------
 
 let wrapModuleOrNamespaceType id cpath mtyp = 
-    NewModuleOrNamespace (Some cpath)  taccessPublic  id  XmlDoc.Empty  [] (MaybeLazy.Strict mtyp)
+    NewModuleOrNamespace (Some cpath) taccessPublic id XmlDoc.Empty [] (MaybeLazy.Strict mtyp)
 
 let wrapModuleOrNamespaceTypeInNamespace id cpath mtyp = 
     let mspec = wrapModuleOrNamespaceType id cpath mtyp
@@ -3566,7 +3566,7 @@ let wrapModuleOrNamespaceExprInNamespace (id :Ident) cpath mexpr =
     TMDefRec (false, [], [ModuleOrNamespaceBinding.Module(mspec, mexpr)], id.idRange)
 
 // cleanup: make this a property
-let SigTypeOfImplFile (TImplFile(_,_,mexpr,_,_)) = mexpr.Type 
+let SigTypeOfImplFile (TImplFile(_,_,_,mexpr,_,_)) = mexpr.Type 
 
 //--------------------------------------------------------------------------
 // Data structures representing what gets hidden and what gets remapped (i.e. renamed or alpha-converted)

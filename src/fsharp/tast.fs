@@ -4323,8 +4323,8 @@ and [<RequireQualifiedAccess>]
 
 /// Represents a complete typechecked implementation file, including its typechecked signature if any.
 ///
-/// TImplFile(qualifiedNameOfFile,pragmas,implementationExpressionWithSignature,hasExplicitEntryPoint,isScript)
-and TypedImplFile = TImplFile of QualifiedNameOfFile * ScopedPragma list * ModuleOrNamespaceExprWithSig * bool * bool
+/// TImplFile(fileName,qualifiedNameOfFile,pragmas,implementationExpressionWithSignature,hasExplicitEntryPoint,isScript)
+and TypedImplFile = TImplFile of string * QualifiedNameOfFile * ScopedPragma list * ModuleOrNamespaceExprWithSig * bool * bool
 
 /// Represents a complete typechecked assembly, made up of multiple implementation files.
 ///
@@ -4466,9 +4466,11 @@ let mkRawStructTupleTy tys = TType_tuple (tupInfoStruct, tys)
 // make up the entire compilation unit
 //---------------------------------------------------------------------------
 
-let mapTImplFile   f   (TImplFile(fragName,pragmas,moduleExpr,hasExplicitEntryPoint,isScript)) = TImplFile(fragName, pragmas,f moduleExpr,hasExplicitEntryPoint,isScript)
-let mapAccImplFile f z (TImplFile(fragName,pragmas,moduleExpr,hasExplicitEntryPoint,isScript)) = let moduleExpr,z = f z moduleExpr in TImplFile(fragName,pragmas,moduleExpr,hasExplicitEntryPoint,isScript), z
-let foldTImplFile  f z (TImplFile(_,_,moduleExpr,_,_)) = f z moduleExpr
+let mapTImplFile   f   (TImplFile(fileName, fragName,pragmas,moduleExpr,hasExplicitEntryPoint,isScript)) = TImplFile(fileName, fragName, pragmas,f moduleExpr,hasExplicitEntryPoint,isScript)
+let mapAccImplFile f z (TImplFile(fileName, fragName,pragmas,moduleExpr,hasExplicitEntryPoint,isScript)) = 
+    let moduleExpr,z = f z moduleExpr
+    TImplFile(fileName,fragName,pragmas,moduleExpr,hasExplicitEntryPoint,isScript), z
+let foldTImplFile  f z (TImplFile(_,_,_,moduleExpr,_,_)) = f z moduleExpr
 
 //---------------------------------------------------------------------------
 // Equality relations on locally defined things 
