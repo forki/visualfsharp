@@ -5101,7 +5101,12 @@ type RootSigs =  Zmap<QualifiedNameOfFile, ModuleOrNamespaceType>
 type RootImpls = Zset<QualifiedNameOfFile >
 type TypecheckerSigsAndImpls = RootSigsAndImpls of RootSigs * RootImpls * ModuleOrNamespaceType * ModuleOrNamespaceType
 
-let qnameOrder = Order.orderBy (fun (q:QualifiedNameOfFile) -> q.Text)
+let qnameOrder =
+    Order.orderBy (fun (q:QualifiedNameOfFile) -> 
+        let fileName = q.Range.FileName
+        if String.IsNullOrWhiteSpace fileName then q.Text else
+        let path = Path.ChangeExtension(Path.GetFullPath(fileName).Replace("\\", "/"), "")
+        q.Text + path)
 
 type TcState = 
     { tcsCcu: CcuThunk
