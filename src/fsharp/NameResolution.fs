@@ -338,6 +338,8 @@ type NameResolutionEnv =
       ///    let v = new Collections.Generic.List<int>() <--- give a warning" 
       
       eModulesAndNamespaces:  NameMultiMap<Tast.ModuleOrNamespaceRef>
+
+      isBody: bool
       
       /// Fully qualified modules and namespaces. 'open' does not change this. 
       eFullyQualifiedModulesAndNamespaces:  NameMultiMap<Tast.ModuleOrNamespaceRef>
@@ -380,6 +382,7 @@ type NameResolutionEnv =
           eFieldLabels = Map.empty
           eUnqualifiedItems = LayeredMap.Empty
           ePatItems = Map.empty
+          isBody = false
           eTyconsByAccessNames = LayeredMultiMap.Empty
           eTyconsByDemangledNameAndArity = LayeredMap.Empty
           eFullyQualifiedTyconsByAccessNames = LayeredMultiMap.Empty
@@ -2323,7 +2326,9 @@ let rec ResolveExprLongIdentPrim sink (ncenv:NameResolver) fullyQualified m ad n
                       ResolutionInfo.SendEntityPathToSink(sink,ncenv,nenv,ItemOccurence.Use,ad,resInfo,ResultTyparChecker(fun () -> CheckAllTyparsInferrable ncenv.amap m item))
                       Some(item,rest)
                   | Exception e -> typeError := Some e; None
-
+                  
+              | Some (Item.Value value) when nenv.isBody && value.IsCompilerGenerated ->
+                  None
               | Some res -> 
                   Some (FreshenUnqualifiedItem ncenv m res, [])
               | None -> 

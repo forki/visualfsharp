@@ -117,6 +117,8 @@ let FreshenMethInfo m (minfo:MethInfo) =
 type ContextInfo =
 /// No context was given.
 | NoContext
+/// Let binding param
+| LetBindingParam
 /// The type equation comes from an IF expression.
 | IfExpression of range
 /// The type equation comes from an omitted else branch.

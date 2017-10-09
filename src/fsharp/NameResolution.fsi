@@ -145,6 +145,7 @@ type NameResolutionEnv =
      eModulesAndNamespaces: NameMultiMap<ModuleOrNamespaceRef>
      eFullyQualifiedModulesAndNamespaces: NameMultiMap<ModuleOrNamespaceRef>
      eFieldLabels: NameMultiMap<RecdFieldRef>
+     isBody:bool
      eTyconsByAccessNames: LayeredMultiMap<string,TyconRef>
      eFullyQualifiedTyconsByAccessNames: LayeredMultiMap<string,TyconRef>
      eTyconsByDemangledNameAndArity: LayeredMap<NameArityPair,TyconRef>

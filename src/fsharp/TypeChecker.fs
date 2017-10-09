@@ -8372,7 +8372,6 @@ and TcFunctionApplicationThen cenv overallTy env tpenv mExprAndArg expr exprty (
 //------------------------------------------------------------------------- 
 
 and TcLongIdentThen cenv overallTy env tpenv (LongIdentWithDots(longId, _)) delayed =
-
     let ad = env.eAccessRights
     let typeNameResInfo = 
         // Given 'MyOverloadedType<int>.MySubType...' use arity of #given type arguments to help 
@@ -8389,8 +8388,13 @@ and TcLongIdentThen cenv overallTy env tpenv (LongIdentWithDots(longId, _)) dela
 
         | _ -> 
             TypeNameResolutionInfo.Default
+    
+    let nameResEnv = 
+        match env.eContextInfo with
+        | ContextInfo.LetBindingParam -> { env.eNameResEnv with isBody = false }
+        | _ -> { env.eNameResEnv with isBody = true }
 
-    let nameResolutionResult = ResolveLongIdentAsExprAndComputeRange cenv.tcSink cenv.nameResolver (rangeOfLid longId) ad env.eNameResEnv typeNameResInfo longId
+    let nameResolutionResult = ResolveLongIdentAsExprAndComputeRange cenv.tcSink cenv.nameResolver (rangeOfLid longId) ad nameResEnv typeNameResInfo longId
     TcItemThen cenv overallTy env tpenv nameResolutionResult delayed
 
 //-------------------------------------------------------------------------
