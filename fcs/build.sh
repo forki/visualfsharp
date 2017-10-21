@@ -6,8 +6,6 @@ then
 else
   dotnet --version
 
-  mono .nuget/NuGet.exe restore -PackagesDirectory packages
-
   cd fcs
 
   # use mono
