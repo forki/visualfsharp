@@ -81,6 +81,10 @@ let buildVersion =
     else if isAppVeyorBuild then sprintf "%s-b%s" assemblyVersion AppVeyorEnvironment.BuildNumber
     else assemblyVersion
 
+Target "Clean" (fun _ ->
+    CleanDir releaseDir
+)
+
 Target "Restore" (fun _ ->
     for p in (!! "./../**/packages.config") do
         let result =
@@ -92,6 +96,7 @@ Target "Restore" (fun _ ->
 
     runDotnet __SOURCE_DIRECTORY__ "restore tools.fsproj"
 )
+
 Target "BuildVersion" (fun _ ->
     Shell.Exec("appveyor", sprintf "UpdateBuild -Version \"%s\"" buildVersion) |> ignore
 )
@@ -180,7 +185,6 @@ Target "PublishNuGet" (fun _ ->
 // --------------------------------------------------------------------------------------
 // Run all targets by default. Invoke 'build <Target>' to override
 
-Target "Clean" DoNothing
 Target "Release" DoNothing
 Target "NuGet" DoNothing
 Target "Build" DoNothing
