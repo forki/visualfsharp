@@ -117,11 +117,12 @@ Target "Build.NetFx" (fun _ ->
 
 Target "Test.NetFx" (fun _ ->
     !! (releaseDir + "/fcs/net45/FSharp.Compiler.Service.Tests.dll")
+    |> Seq.map FullName
     |>  Fake.Testing.NUnit3.NUnit3 (fun p ->
         { p with
             ToolPath = @"..\packages\NUnit.Console.3.0.0\tools\nunit3-console.exe"
             ShadowCopy = false
-            WorkingDir = FullName "."
+            WorkingDir = FullName (releaseDir + "/fcs/net45")
             TimeOut = TimeSpan.FromMinutes 20. })
 )
 
