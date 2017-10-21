@@ -95,10 +95,13 @@ type ProjectCracker =
         p.BeginErrorReadLine()
 
         p.WaitForExit()
-        if p.ExitCode <> 0 then
-            failwithf "'FSharp.Compiler.Service.ProjectCrackerTool.exe' exited with code %i: %s" p.ExitCode (sbErr.ToString())
-            
+        
         let crackerOut = sbOut.ToString()
+        let crackerErr = sbErr.ToString()
+
+        if p.ExitCode <> 0 then
+            failwithf "'FSharp.Compiler.Service.ProjectCrackerTool.exe' exited with code %i.\nstdoutput was:\n%s\n\nstderr was:\n%s" p.ExitCode crackerOut crackerErr
+            
         let opts = 
             try
                 let ser = new DataContractJsonSerializer(typeof<ProjectCrackerTool.ProjectOptions>)
@@ -107,7 +110,7 @@ type ProjectCracker =
                 ser.ReadObject(ms) :?> ProjectCrackerTool.ProjectOptions
             with
               exn ->
-                raise (Exception(sprintf "error parsing ProjectCrackerTool output, stdoutput was:\n%s\n\nstderr was:\n%s" crackerOut (sbErr.ToString()), exn))
+                raise (Exception(sprintf "error parsing ProjectCrackerTool output, stdoutput was:\n%s\n\nstderr was:\n%s" crackerOut crackerErr, exn))
 #endif
         
         convert opts, !logMap
