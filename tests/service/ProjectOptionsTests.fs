@@ -149,7 +149,7 @@ let ``Project file parsing -- non-existent project file``() =
   try
     ProjectCracker.GetProjectOptionsFromProjectFileLogged(f, enableLogging=true) |> ignore
   with e -> 
-    Assert.That(e.Message, Contains.Substring "Could not find file")
+    Assert.That(e.Message, Contains.Substring "DoesNotExist.fsproj")
 
 [<Test>]
 let ``Project file parsing -- output file``() =

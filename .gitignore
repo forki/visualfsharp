@@ -121,3 +121,4 @@ tests/fsharpqa/testenv/bin/System.ValueTuple.dll
 */.fake
 /fcs/packages/
 */paket-files/
+/fcs/TestResult.xml
