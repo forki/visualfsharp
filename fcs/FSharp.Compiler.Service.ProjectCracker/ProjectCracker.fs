@@ -107,7 +107,7 @@ type ProjectCracker =
                 ser.ReadObject(xReader) :?> ProjectCrackerTool.ProjectOptions
             with
               exn ->
-                raise (Exception(sprintf "error parsing ProjectCrackerTool output, output was:\n%s" crackerOut, exn))
+                raise (Exception(sprintf "error parsing ProjectCrackerTool output, stdoutput was:\n%s\n\nstderr was:\n%s" crackerOut (sbErr.ToString()), exn))
 #endif
         
         convert opts, !logMap
