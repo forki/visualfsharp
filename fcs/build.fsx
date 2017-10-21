@@ -27,6 +27,15 @@ for p in (!! "./../**/packages.config") do
 
 let dotnetExePath = DotNetCli.InstallDotNetSDK "2.0.0"
 
+let runDotnet workingDir args =
+    let result =
+        ExecProcess (fun info ->
+            info.FileName <- dotnetExePath
+            info.WorkingDirectory <- workingDir
+            info.Arguments <- args) TimeSpan.MaxValue
+
+    if result <> 0 then failwithf "dotnet %s failed" args
+
 // --------------------------------------------------------------------------------------
 // Utilities
 // --------------------------------------------------------------------------------------
@@ -122,26 +131,14 @@ Target "NuGet.NetFx" (fun _ ->
 // --------------------------------------------------------------------------------------
 // .NET Core and .NET Core SDK
 
-let isDotnetSDKInstalled =
-    match Fake.EnvironmentHelper.environVarOrNone "FCS_DNC" with
-    | Some flag ->
-        match bool.TryParse flag with
-        | true, result -> result
-        | _ -> false
-    | None ->
-        try
-            Shell.Exec("dotnet", "--info") = 0
-        with
-        _ -> false
-
 
 Target "Build.NetStd" (fun _ ->
-    runCmdIn __SOURCE_DIRECTORY__  "dotnet" "pack %s -v n -c Release" "FSharp.Compiler.Service.netstandard.sln"
+    runDotnet __SOURCE_DIRECTORY__ (sprintf "pack %s -v n -c Release" "FSharp.Compiler.Service.netstandard.sln")
 )
 
 
 Target "Test.NetStd" (fun _ ->
-    runCmdIn __SOURCE_DIRECTORY__  "dotnet" "run -p FSharp.Compiler.Service.Tests.netcore/FSharp.Compiler.Service.Tests.netcore.fsproj -c Release -- --result:TestResults.NetStd.xml;format=nunit3"
+    runDotnet __SOURCE_DIRECTORY__ (sprintf "run -p FSharp.Compiler.Service.Tests.netcore/FSharp.Compiler.Service.Tests.netcore.fsproj -c Release -- --result:TestResults.NetStd.xml;format=nunit3")
 )
 
 
@@ -149,7 +146,7 @@ Target "Test.NetStd" (fun _ ->
 Target "Nuget.AddNetStd" (fun _ ->
     let nupkg = sprintf "%s/FSharp.Compiler.Service.%s.nupkg" releaseDir release.AssemblyVersion
     let netcoreNupkg = sprintf "FSharp.Compiler.Service.netstandard/bin/Release/FSharp.Compiler.Service.%s.nupkg" release.AssemblyVersion
-    runCmdIn __SOURCE_DIRECTORY__ "dotnet" "mergenupkg --source %s --other %s --framework netstandard1.6" nupkg netcoreNupkg
+    runDotnet __SOURCE_DIRECTORY__ (sprintf "mergenupkg --source %s --other %s --framework netstandard1.6" nupkg netcoreNupkg)
 )
 
 
@@ -203,15 +200,15 @@ Target "TestAndNuGet" DoNothing
   ==> "Test.NetStd"
 
 "Build.NetFx"
-  =?> ("Build.NetStd", isDotnetSDKInstalled)
+  ==> "Build.NetStd"
   ==> "Build"
 
 "Build.NetStd"
-  =?> ("Nuget.AddNetStd", isDotnetSDKInstalled)
+  ==> "Nuget.AddNetStd"
 
 "Build.NetFx"
   ==> "NuGet.NetFx"
-  =?> ("Nuget.AddNetStd", isDotnetSDKInstalled)
+  ==> "Nuget.AddNetStd"
   ==> "NuGet"
 
 "Test.NetFx"
@@ -219,9 +216,7 @@ Target "TestAndNuGet" DoNothing
 
 "NuGet"
   ==> "TestAndNuGet"
-
-//"Test.NetStd"
-//  ==> "TestAndNuGet"
+  
 
 "Build"
   ==> "NuGet"
