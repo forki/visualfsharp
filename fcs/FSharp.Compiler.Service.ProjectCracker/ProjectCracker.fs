@@ -102,9 +102,9 @@ type ProjectCracker =
         let opts = 
             try
                 let ser = new DataContractJsonSerializer(typeof<ProjectCrackerTool.ProjectOptions>)
-                use s = new StringReader(crackerOut)
-                use xReader = new XmlTextReader(s)
-                ser.ReadObject(xReader) :?> ProjectCrackerTool.ProjectOptions
+                let stringBytes = Encoding.Unicode.GetBytes crackerOut
+                use ms = new MemoryStream(stringBytes)
+                ser.ReadObject(ms) :?> ProjectCrackerTool.ProjectOptions
             with
               exn ->
                 raise (Exception(sprintf "error parsing ProjectCrackerTool output, stdoutput was:\n%s\n\nstderr was:\n%s" crackerOut (sbErr.ToString()), exn))
