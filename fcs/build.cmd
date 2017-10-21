@@ -4,8 +4,6 @@ dotnet --version
 
 setlocal
 cd fcs
-..\.nuget\NuGet.exe restore -PackagesDirectory "..\packages"
-
 
 dotnet restore tools.fsproj
 if errorlevel 1 (
