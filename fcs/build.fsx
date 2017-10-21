@@ -20,7 +20,7 @@ let result =
             info.FileName <- FullName @"..\.nuget\nuget.exe"
             info.WorkingDirectory <- FullName @"..\"
             info.Arguments <- sprintf "restore PackagesDirectory \"%s\"" (FullName @"..\packages")) TimeSpan.MaxValue
-if result <> 0 then failwithf "nuget restore %s failed" args
+if result <> 0 then failwith "nuget restore failed"
 
 
 // --------------------------------------------------------------------------------------
