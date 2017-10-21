@@ -102,6 +102,7 @@ Target "Test.NetFx" (fun _ ->
         { p with
             ToolPath = @"..\packages\NUnit.Console.3.0.0\tools\nunit3-console.exe"
             ShadowCopy = false
+            WorkingDir = FullName "."
             TimeOut = TimeSpan.FromMinutes 20. })
 )
 
