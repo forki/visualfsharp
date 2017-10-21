@@ -14,8 +14,8 @@ def static getBuildJobName(def configuration, def os) {
     osList.each { os ->
         def configurations = [];
         if (os == 'Windows_NT') {
-        }
             configurations = ['Debug', 'Release_ci_part1', 'Release_ci_part2', 'Release_ci_part3', 'Release_net40_no_vs', 'Release_fcs' ];
+        }
         else
         {
             // Linux
