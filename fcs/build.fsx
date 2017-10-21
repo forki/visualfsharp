@@ -17,9 +17,9 @@ System.Console.OutputEncoding <- System.Text.Encoding.UTF8
 
 let result =
         ExecProcess (fun info ->
-            info.FileName <- FullName @"..\.nuget\nuget.exe"
-            info.WorkingDirectory <- FullName @"..\"
-            info.Arguments <- sprintf "restore PackagesDirectory \"%s\"" (FullName @"..\packages")) TimeSpan.MaxValue
+            info.FileName <- FullName @"./../.nuget/nuget.exe"
+            info.WorkingDirectory <- FullName @"./.."
+            info.Arguments <- sprintf "restore --PackagesDirectory \"%s\"" (FullName @"./../packages")) TimeSpan.MaxValue
 if result <> 0 then failwith "nuget restore failed"
 
 
