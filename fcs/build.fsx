@@ -15,12 +15,13 @@ open Fake.ReleaseNotesHelper
 System.Console.OutputEncoding <- System.Text.Encoding.UTF8
 #endif
 
-let result =
+for p in (!! "./../**/packages.config") do
+    let result =
         ExecProcess (fun info ->
             info.FileName <- FullName @"./../.nuget/nuget.exe"
             info.WorkingDirectory <- FullName @"./.."
-            info.Arguments <- sprintf "restore") TimeSpan.MaxValue
-if result <> 0 then failwith "nuget restore failed"
+            info.Arguments <- sprintf "restore %s" (FullName p)) TimeSpan.MaxValue
+    if result <> 0 then failwithf "nuget restore %s failed" p
 
 
 // --------------------------------------------------------------------------------------
