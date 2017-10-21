@@ -20,7 +20,7 @@ for p in (!! "./../**/packages.config") do
         ExecProcess (fun info ->
             info.FileName <- FullName @"./../.nuget/nuget.exe"
             info.WorkingDirectory <- FullName @"./.."
-            info.Arguments <- sprintf "restore %s" (FullName p)) TimeSpan.MaxValue
+            info.Arguments <- sprintf "restore %s -PackagesDirectory \"%s\" "  (FullName p) (FullName "./../packages")) TimeSpan.MaxValue
     if result <> 0 then failwithf "nuget restore %s failed" p
 
 
