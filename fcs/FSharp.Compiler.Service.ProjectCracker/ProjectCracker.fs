@@ -8,6 +8,7 @@ open System.Diagnostics
 open System.Text
 open System.IO
 open System
+open System.Xml
 
 type ProjectCracker =
     static member GetProjectOptionsFromProjectFileLogged(projectFileName : string, ?properties : (string * string) list, ?loadedTimeStamp, ?enableLogging) =
@@ -71,16 +72,42 @@ type ProjectCracker =
         
         let crackerFilename = Path.Combine(codebase,"FSharp.Compiler.Service.ProjectCrackerTool.exe")
         if not (File.Exists crackerFilename) then failwithf "ProjectCracker exe not found at: %s it must be next to the ProjectCracker dll." crackerFilename
+
         let p = new System.Diagnostics.Process()
+
         p.StartInfo.FileName <- crackerFilename
         p.StartInfo.Arguments <- arguments.ToString()
         p.StartInfo.UseShellExecute <- false
         p.StartInfo.CreateNoWindow <- true
         p.StartInfo.RedirectStandardOutput <- true
+        p.StartInfo.RedirectStandardError <- true
+
+        let sbOut = StringBuilder()
+        let sbErr = StringBuilder()
+        
+        p.ErrorDataReceived.AddHandler(fun _ a -> sbErr.AppendLine a.Data |> ignore)
+        p.OutputDataReceived.AddHandler(fun _ a -> sbOut.AppendLine a.Data |> ignore)
+
         ignore <| p.Start()
     
-        let ser = new DataContractJsonSerializer(typeof<ProjectCrackerTool.ProjectOptions>)
-        let opts = ser.ReadObject(p.StandardOutput.BaseStream) :?> ProjectCrackerTool.ProjectOptions
+        p.EnableRaisingEvents <- true
+        p.BeginOutputReadLine()
+        p.BeginErrorReadLine()
+
+        p.WaitForExit()
+        if p.ExitCode <> 0 then
+            failwithf "'FSharp.Compiler.Service.ProjectCrackerTool.exe' exited with code %i: %s" p.ExitCode (sbErr.ToString())
+            
+        let crackerOut = sbOut.ToString()
+        let opts = 
+            try
+                let ser = new DataContractJsonSerializer(typeof<ProjectCrackerTool.ProjectOptions>)
+                use s = new StringReader(crackerOut)
+                use xReader = new XmlTextReader(s)
+                ser.ReadObject(xReader) :?> ProjectCrackerTool.ProjectOptions
+            with
+              exn ->
+                raise (Exception(sprintf "error parsing ProjectCrackerTool output, output was:\n%s" crackerOut, exn))
 #endif
         
         convert opts, !logMap
