@@ -18,9 +18,9 @@ System.Console.OutputEncoding <- System.Text.Encoding.UTF8
 for p in (!! "./../**/packages.config") do
     let result =
         ExecProcess (fun info ->
-            info.FileName <- FullName @"./../.nuget/nuget.exe"
+            info.FileName <- FullName @"./../.nuget/NuGet.exe"
             info.WorkingDirectory <- FullName @"./.."
-            info.Arguments <- sprintf "restore %s -PackagesDirectory \"%s\" "  (FullName p) (FullName "./../packages")) TimeSpan.MaxValue
+            info.Arguments <- sprintf "restore %s -PackagesDirectory \"%s\" -ConfigFile \"%s\""   (FullName p) (FullName "./../packages") (FullName "./../.nuget/NuGet.Config")) TimeSpan.MaxValue
     if result <> 0 then failwithf "nuget restore %s failed" p
 
 
