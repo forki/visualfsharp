@@ -19,7 +19,7 @@ let result =
         ExecProcess (fun info ->
             info.FileName <- FullName @"./../.nuget/nuget.exe"
             info.WorkingDirectory <- FullName @"./.."
-            info.Arguments <- sprintf "restore --PackagesDirectory \"%s\"" (FullName @"./../packages")) TimeSpan.MaxValue
+            info.Arguments <- sprintf "restore") TimeSpan.MaxValue
 if result <> 0 then failwith "nuget restore failed"
 
 
