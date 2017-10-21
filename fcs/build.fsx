@@ -15,6 +15,14 @@ open Fake.ReleaseNotesHelper
 System.Console.OutputEncoding <- System.Text.Encoding.UTF8
 #endif
 
+let result =
+        ExecProcess (fun info ->
+            info.FileName <- FullName @"..\.nuget\nuget.exe"
+            info.WorkingDirectory <- Füllmenge @"..\"
+            info.Arguments <- "restore") TimeSpan.MaxValue
+if result <> 0 then failwithf "nuget restore %s failed" args
+
+
 // --------------------------------------------------------------------------------------
 // Utilities
 // --------------------------------------------------------------------------------------
