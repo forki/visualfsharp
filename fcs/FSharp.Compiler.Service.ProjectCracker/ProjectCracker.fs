@@ -52,9 +52,9 @@ module Utils =
                   UnresolvedReferences = None 
                   OriginalLoadReferences = []
                   ExtraProjectInfo = None
-                  Stamp = None }, !logMap
+                  Stamp = None }
 
-        convertProject originalOpts
+        convertProject originalOpts, !logMap
 
 type ProjectCracker =
 
