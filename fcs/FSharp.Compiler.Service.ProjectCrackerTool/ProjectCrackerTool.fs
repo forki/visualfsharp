@@ -60,6 +60,8 @@ module internal ProjectCrackerTool =
       let mkAbsoluteOpt dir v =  Option.map (mkAbsolute dir) v
 
       let CrackProjectUsingOldBuildAPI(fsprojFile:string) = 
+          
+          printfn "olds"
           let engine = new Microsoft.Build.BuildEngine.Engine()
           Option.iter (fun l -> engine.RegisterLogger(l)) logOpt
 
@@ -113,6 +115,7 @@ module internal ProjectCrackerTool =
 #endif
 
       let vs =
+          printfn "Star vs"
           let programFiles =
               let getEnv v =
                   let result = System.Environment.GetEnvironmentVariable(v)
