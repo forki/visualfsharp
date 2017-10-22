@@ -41,8 +41,9 @@ module internal ProjectCrackerTool =
   //
   [<Sealed; AutoSerializable(false)>]
   type FSharpProjectFileInfo (fsprojFileName:string, ?properties, ?enableLogging) =
+      
 
-      let properties = defaultArg properties []
+      let properties = printfn "props" ; defaultArg properties []
       let enableLogging = defaultArg enableLogging false
       let mkAbsolute dir v = 
           if Path.IsPathRooted v then v
@@ -389,7 +390,7 @@ module internal ProjectCrackerTool =
       member x.OutputPath = outputPathOpt
       member x.FullPath = fsprojFullPath
       member x.LogOutput = logOutput
-      static member Parse(fsprojFileName:string, ?properties, ?enableLogging) = new FSharpProjectFileInfo(fsprojFileName, ?properties=properties, ?enableLogging=enableLogging)
+      static member Parse(fsprojFileName:string, ?properties, ?enableLogging) = printfn "ctor" ; new FSharpProjectFileInfo(fsprojFileName, ?properties=properties, ?enableLogging=enableLogging)
 
   let getOptions file enableLogging properties =
     let cache = System.Collections.Generic.HashSet<_>()
