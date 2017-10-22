@@ -117,7 +117,7 @@ Target "Build.NetFx" (fun _ ->
 
 Target "Test.NetFx" (fun _ ->
     !! ("./**/dependencies/**/MSBuild.v14.0/**/*.*") 
-    |> CopyFile (releaseDir + "/fcs/net45")
+    |> CopyFiles (releaseDir + "/fcs/net45")
     
     !! (releaseDir + "/fcs/net45/FSharp.Compiler.Service.Tests.dll")
     |> Seq.map FullName
