@@ -389,8 +389,6 @@ module internal ProjectCrackerTool =
     let rec getOptions file : Option<string> * ProjectOptions =
       if not (cache.Add file) then
         failwithf "Circular dependency: %A" file
-      if cache.Count > 100 then failwithf "%A" <| Seq.toList cache
-
       let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=enableLogging)
 
       let referencedProjectOptions =
