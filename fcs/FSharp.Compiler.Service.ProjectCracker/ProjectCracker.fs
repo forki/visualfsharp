@@ -12,7 +12,7 @@ open System.Xml
 
 module Utils =
 
-    let Convert (originalOpts: ProjectCrackerTool.ProjectOptions) =
+    let Convert loadedTimeStamp (originalOpts: ProjectCrackerTool.ProjectOptions) =
 
         let cache = System.Collections.Generic.HashSet<_>()
         let logMap = ref Map.empty
@@ -23,7 +23,7 @@ module Utils =
             | _ ->
                 if not (isNull opts.Error) then failwith opts.Error
 
-                let referencedProjects() = Array.map (fun (a, b) -> convertProject b) opts.ReferencedProjectOptions
+                let referencedProjects() = Array.map (fun (a, b) -> a,convertProject b) opts.ReferencedProjectOptions
             
                 let sourceFiles, otherOptions = 
                     opts.Options 
@@ -127,7 +127,7 @@ type ProjectCracker =
                 raise (Exception(sprintf "error parsing ProjectCrackerTool output, stdoutput was:\n%s\n\nstderr was:\n%s" crackerOut crackerErr, exn))
 #endif
         
-        Utils.Convert opts
+        Utils.Convert loadedTimeStamp opts
 
     static member GetProjectOptionsFromProjectFile(projectFileName : string, ?properties : (string * string) list, ?loadedTimeStamp) =
         fst (ProjectCracker.GetProjectOptionsFromProjectFileLogged(

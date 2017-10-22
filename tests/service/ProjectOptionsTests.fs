@@ -191,7 +191,7 @@ let ``Project file parsing -- no project references``() =
 
 [<Test>]
 let ``Project file parsing -- 2nd level references``() =
-  let p = ProjectCracker.GetProjectOptionsFromProjectFileLogged(__SOURCE_DIRECTORY__ + @"/data/Test2.fsproj", true)
+  let p,_ = ProjectCracker.GetProjectOptionsFromProjectFileLogged(__SOURCE_DIRECTORY__ + @"/data/Test2.fsproj", true)
 
   let references = getReferencedFilenames p.OtherOptions
   checkOption references "FSharp.Core.dll"
