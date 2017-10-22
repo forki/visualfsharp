@@ -36,18 +36,156 @@ module internal ProjectCrackerTool =
       member th.Compile(_:obj, _:obj, _:obj) = 0
       interface ITaskHost
 
+  let vs =
+    let programFiles =
+        let getEnv v =
+            let result = System.Environment.GetEnvironmentVariable(v)
+            match result with
+            | null -> None
+            | _ -> Some result
+
+        match List.tryPick getEnv [ "ProgramFiles(x86)";  "ProgramFiles" ] with
+        | Some r -> r
+        | None -> "C:\\Program Files (x86)"
+
+    let vsVersions = ["14.0"; "12.0"]
+    let msbuildBin v = IO.Path.Combine(programFiles, "MSBuild", v, "Bin", "MSBuild.exe")
+    List.tryFind (fun v -> IO.File.Exists(msbuildBin v)) vsVersions
+
+  let mkAbsolute dir v = 
+    if Path.IsPathRooted v then v
+    else Path.Combine(dir, v)
+
+  let mkAbsoluteOpt dir v =  Option.map (mkAbsolute dir) v
+
+  let CrackProjectUsingNewBuildAPI fsprojFile properties logOpt =
+    printfn "new api" 
+    let fsprojFullPath = try Path.GetFullPath(fsprojFile) with _ -> fsprojFile
+    let fsprojAbsDirectory = Path.GetDirectoryName fsprojFullPath
+    printfn "Starteed"
+    use _pwd = 
+        let dir = Directory.GetCurrentDirectory()
+        Directory.SetCurrentDirectory(fsprojAbsDirectory)
+        { new System.IDisposable with
+            member x.Dispose() = Directory.SetCurrentDirectory(dir) }
+    use engine = new Microsoft.Build.Evaluation.ProjectCollection()
+    let host = new HostCompile()
+    printfn "Compile"
+    engine.HostServices.RegisterHostObject(fsprojFullPath, "CoreCompile", "Fsc", host)
+    printfn "Registered"
+
+    let projectInstanceFromFullPath (fsprojFullPath: string) =
+        use file = new FileStream(fsprojFullPath, FileMode.Open, FileAccess.Read, FileShare.Read)
+        use stream = new StreamReader(file)
+        use xmlReader = System.Xml.XmlReader.Create(stream)
+
+        let project = engine.LoadProject(xmlReader, FullPath=fsprojFullPath)
+              
+        project.SetGlobalProperty("BuildingInsideVisualStudio", "true") |> ignore
+        if not (List.exists (fun (p,_) -> p = "VisualStudioVersion") properties) then
+            match vs with
+            | Some version -> project.SetGlobalProperty("VisualStudioVersion", version) |> ignore
+            | None -> ()
+        project.SetGlobalProperty("ShouldUnsetParentConfigurationAndPlatform", "false") |> ignore
+        for (prop, value) in properties do
+            project.SetGlobalProperty(prop, value) |> ignore
+        printfn "instance"
+        project.CreateProjectInstance()
+
+    let project = projectInstanceFromFullPath fsprojFullPath
+    let directory = project.Directory
+
+    let getprop (p: Microsoft.Build.Execution.ProjectInstance) s =
+        let v = p.GetPropertyValue s
+        if String.IsNullOrWhiteSpace v then None
+        else Some v
+
+    let outFileOpt = getprop project "TargetPath"
+
+    let log = match logOpt with
+              | None -> []
+              | Some l -> [l :> ILogger]
+
+    project.Build([| "Build" |], log) |> ignore
+
+    let getItems s = [ for f in project.GetItems(s) -> mkAbsolute directory f.EvaluatedInclude ]
+
+    let projectReferences =
+        [ for cp in project.GetItems("ProjectReference") do
+                yield cp.GetMetadataValue("FullPath")
+        ]
+
+    let references =
+        [ for i in project.GetItems("ReferencePath") do
+            yield i.EvaluatedInclude
+            for i in project.GetItems("ChildProjectReferences") do
+            yield i.EvaluatedInclude ]
+
+    outFileOpt, directory, getItems, references, projectReferences, getprop project, project.FullPath
+
+#if !DOTNETCORE
+  let CrackProjectUsingOldBuildAPI (fsprojFile:string) properties logOpt = 
+    printfn "olds"
+    let engine = new Microsoft.Build.BuildEngine.Engine()
+    Option.iter (fun l -> engine.RegisterLogger(l)) logOpt
+
+    let bpg = Microsoft.Build.BuildEngine.BuildPropertyGroup()
+
+    bpg.SetProperty("BuildingInsideVisualStudio", "true")
+    for (prop, value) in properties do
+        bpg.SetProperty(prop, value)
+
+    engine.GlobalProperties <- bpg
+
+    let projectFromFile (fsprojFile:string) =
+        // We seem to need to pass 12.0/4.0 in here for some unknown reason
+        let project = new Microsoft.Build.BuildEngine.Project(engine, engine.DefaultToolsVersion)
+        do project.Load(fsprojFile)
+        project
+
+    let project = projectFromFile fsprojFile
+    project.Build([| "ResolveReferences" |])  |> ignore
+    let directory = Path.GetDirectoryName project.FullFileName
+
+    let getProp (p: Microsoft.Build.BuildEngine.Project) s = 
+        let v = p.GetEvaluatedProperty s
+        if String.IsNullOrWhiteSpace v then None
+        else Some v
+
+    let outFileOpt =
+        match mkAbsoluteOpt directory (getProp project "OutDir") with
+        | None -> None
+        | Some d -> mkAbsoluteOpt d (getProp project "TargetFileName")
+
+    let getItems s = 
+        let fs  = project.GetEvaluatedItemsByName(s)
+        [ for f in fs -> mkAbsolute directory f.FinalItemSpec ]
+
+    let projectReferences =
+        [  for i in project.GetEvaluatedItemsByName("ProjectReference") do
+             yield mkAbsolute directory i.FinalItemSpec
+        ]
+
+    let references = 
+        [ for i in project.GetEvaluatedItemsByName("ReferencePath") do
+            yield i.FinalItemSpec
+          for i in project.GetEvaluatedItemsByName("ChildProjectReferences") do
+            yield i.FinalItemSpec ]
+        // Duplicate slashes sometimes appear in the output here, which prevents
+        // them from matching keys used in FSharpProjectOptions.ReferencedProjects
+        |> List.map (fun (s: string) -> s.Replace("//","/"))
+
+    outFileOpt, directory, getItems, references, projectReferences, getProp project, project.FullFileName
+
+#endif
+
   //----------------------------------------------------------------------------
   // FSharpProjectFileInfo
   //
   [<Sealed; AutoSerializable(false)>]
   type FSharpProjectFileInfo (fsprojFileName:string, ?properties, ?enableLogging) =
-      
-
       let properties = printfn "props" ; defaultArg properties []
       let enableLogging = defaultArg enableLogging false
-      let mkAbsolute dir v = 
-          if Path.IsPathRooted v then v
-          else Path.Combine(dir, v)
           
       let firstx = printfn "first"; 1
 
@@ -59,157 +197,18 @@ module internal ProjectCrackerTool =
           else
               None
       let secondx = printfn "logger"; 0
-#if !DOTNETCORE
-      let mkAbsoluteOpt dir v =  Option.map (mkAbsolute dir) v
-
-      let CrackProjectUsingOldBuildAPI(fsprojFile:string) = 
-          
-          printfn "olds"
-          let engine = new Microsoft.Build.BuildEngine.Engine()
-          Option.iter (fun l -> engine.RegisterLogger(l)) logOpt
-
-          let bpg = Microsoft.Build.BuildEngine.BuildPropertyGroup()
-
-          bpg.SetProperty("BuildingInsideVisualStudio", "true")
-          for (prop, value) in properties do
-              bpg.SetProperty(prop, value)
-
-          engine.GlobalProperties <- bpg
-
-          let projectFromFile (fsprojFile:string) =
-              // We seem to need to pass 12.0/4.0 in here for some unknown reason
-              let project = new Microsoft.Build.BuildEngine.Project(engine, engine.DefaultToolsVersion)
-              do project.Load(fsprojFile)
-              project
-
-          let project = projectFromFile fsprojFile
-          project.Build([| "ResolveReferences" |])  |> ignore
-          let directory = Path.GetDirectoryName project.FullFileName
-
-          let getProp (p: Microsoft.Build.BuildEngine.Project) s = 
-              let v = p.GetEvaluatedProperty s
-              if String.IsNullOrWhiteSpace v then None
-              else Some v
-
-          let outFileOpt =
-              match mkAbsoluteOpt directory (getProp project "OutDir") with
-              | None -> None
-              | Some d -> mkAbsoluteOpt d (getProp project "TargetFileName")
-
-          let getItems s = 
-              let fs  = project.GetEvaluatedItemsByName(s)
-              [ for f in fs -> mkAbsolute directory f.FinalItemSpec ]
-
-          let projectReferences =
-              [  for i in project.GetEvaluatedItemsByName("ProjectReference") do
-                     yield mkAbsolute directory i.FinalItemSpec
-              ]
-
-          let references = 
-              [ for i in project.GetEvaluatedItemsByName("ReferencePath") do
-                  yield i.FinalItemSpec
-                for i in project.GetEvaluatedItemsByName("ChildProjectReferences") do
-                  yield i.FinalItemSpec ]
-              // Duplicate slashes sometimes appear in the output here, which prevents
-              // them from matching keys used in FSharpProjectOptions.ReferencedProjects
-              |> List.map (fun (s: string) -> s.Replace("//","/"))
-
-          outFileOpt, directory, getItems, references, projectReferences, getProp project, project.FullFileName
-#endif
-
-      let vs =
-          printfn "Star vs"
-          let programFiles =
-              let getEnv v =
-                  let result = System.Environment.GetEnvironmentVariable(v)
-                  match result with
-                  | null -> None
-                  | _ -> Some result
-
-              match List.tryPick getEnv [ "ProgramFiles(x86)";  "ProgramFiles" ] with
-              | Some r -> r
-              | None -> "C:\\Program Files (x86)"
-
-          let vsVersions = ["14.0"; "12.0"]
-          let msbuildBin v = IO.Path.Combine(programFiles, "MSBuild", v, "Bin", "MSBuild.exe")
-          List.tryFind (fun v -> IO.File.Exists(msbuildBin v)) vsVersions
-
-      let CrackProjectUsingNewBuildAPI(fsprojFile) =
-          printfn "new api" 
-          let fsprojFullPath = try Path.GetFullPath(fsprojFile) with _ -> fsprojFile
-          let fsprojAbsDirectory = Path.GetDirectoryName fsprojFullPath
-          printfn "Starteed"
-          use _pwd = 
-              let dir = Directory.GetCurrentDirectory()
-              Directory.SetCurrentDirectory(fsprojAbsDirectory)
-              { new System.IDisposable with
-                    member x.Dispose() = Directory.SetCurrentDirectory(dir) }
-          use engine = new Microsoft.Build.Evaluation.ProjectCollection()
-          let host = new HostCompile()
-          printfn "Compile"
-          engine.HostServices.RegisterHostObject(fsprojFullPath, "CoreCompile", "Fsc", host)
-          printfn "Registered"
-
-          let projectInstanceFromFullPath (fsprojFullPath: string) =
-              use file = new FileStream(fsprojFullPath, FileMode.Open, FileAccess.Read, FileShare.Read)
-              use stream = new StreamReader(file)
-              use xmlReader = System.Xml.XmlReader.Create(stream)
-
-              let project = engine.LoadProject(xmlReader, FullPath=fsprojFullPath)
-              
-              project.SetGlobalProperty("BuildingInsideVisualStudio", "true") |> ignore
-              if not (List.exists (fun (p,_) -> p = "VisualStudioVersion") properties) then
-                  match vs with
-                  | Some version -> project.SetGlobalProperty("VisualStudioVersion", version) |> ignore
-                  | None -> ()
-              project.SetGlobalProperty("ShouldUnsetParentConfigurationAndPlatform", "false") |> ignore
-              for (prop, value) in properties do
-                    project.SetGlobalProperty(prop, value) |> ignore
-              printfn "instance"
-              project.CreateProjectInstance()
-
-          let project = projectInstanceFromFullPath fsprojFullPath
-          let directory = project.Directory
-
-          let getprop (p: Microsoft.Build.Execution.ProjectInstance) s =
-              let v = p.GetPropertyValue s
-              if String.IsNullOrWhiteSpace v then None
-              else Some v
-
-          let outFileOpt = getprop project "TargetPath"
-
-          let log = match logOpt with
-                    | None -> []
-                    | Some l -> [l :> ILogger]
-
-          project.Build([| "Build" |], log) |> ignore
-
-          let getItems s = [ for f in project.GetItems(s) -> mkAbsolute directory f.EvaluatedInclude ]
-
-          let projectReferences =
-                [ for cp in project.GetItems("ProjectReference") do
-                      yield cp.GetMetadataValue("FullPath")
-                ]
-
-          let references =
-                [ for i in project.GetItems("ReferencePath") do
-                    yield i.EvaluatedInclude
-                  for i in project.GetItems("ChildProjectReferences") do
-                    yield i.EvaluatedInclude ]
-
-          outFileOpt, directory, getItems, references, projectReferences, getprop project, project.FullPath
-
+  
       let outFileOpt, directory, getItems, references, projectReferences, getProp, fsprojFullPath =
         printfn "funn" 
         try
 #if DOTNETCORE
-          CrackProjectUsingNewBuildAPI(fsprojFileName)
+          CrackProjectUsingNewBuildAPI fsprojFileName properties logOpt
         with
 #else
           if runningOnMono then
-              CrackProjectUsingOldBuildAPI(fsprojFileName)
+              CrackProjectUsingOldBuildAPI fsprojFileName properties logOpt
           else
-              CrackProjectUsingNewBuildAPI(fsprojFileName)
+              CrackProjectUsingNewBuildAPI fsprojFileName properties logOpt
         with
           | :? Microsoft.Build.BuildEngine.InvalidProjectFileException as e ->
                raise (Microsoft.Build.Exceptions.InvalidProjectFileException(
