@@ -16,40 +16,47 @@ type ProjectCracker =
         let properties = defaultArg properties []
         let enableLogging = defaultArg enableLogging true
         let logMap = ref Map.empty
+        let cache = System.Collections.Generic.Dictionary<_,_>()
 
         let rec convert (opts: ProjectCrackerTool.ProjectOptions) : FSharpProjectOptions =
-            if not (isNull opts.Error) then failwith opts.Error
+            match cache.TryGetValue opts with
+            | true, r -> r
+            | _ ->
+                if not (isNull opts.Error) then failwith opts.Error
 
-            let referencedProjects = Array.map (fun (a, b) -> a, convert b) opts.ReferencedProjectOptions
+                let referencedProjects = Array.map (fun (a, b) -> a, convert b) opts.ReferencedProjectOptions
             
-            let sourceFiles, otherOptions = 
-                opts.Options 
-                |> Array.partition (fun x -> 
-                    let extension = Path.GetExtension(x).ToLower()
-                    x.IndexOfAny(Path.GetInvalidPathChars()) = -1 
-                    && (extension = ".fs" || extension = ".fsi"))
+                let sourceFiles, otherOptions = 
+                    opts.Options 
+                    |> Array.partition (fun x -> 
+                        let extension = Path.GetExtension(x).ToLower()
+                        x.IndexOfAny(Path.GetInvalidPathChars()) = -1 
+                        && (extension = ".fs" || extension = ".fsi"))
             
-            let sepChar = Path.DirectorySeparatorChar
+                let sepChar = Path.DirectorySeparatorChar
             
-            let sourceFiles = sourceFiles |> Array.map (fun x -> 
-                match sepChar with
-                | '\\' -> x.Replace('/', '\\')
-                | '/' -> x.Replace('\\', '/')
-                | _ -> x
-            )
+                let sourceFiles = sourceFiles |> Array.map (fun x -> 
+                    match sepChar with
+                    | '\\' -> x.Replace('/', '\\')
+                    | '/' -> x.Replace('\\', '/')
+                    | _ -> x
+                )
 
-            logMap := Map.add opts.ProjectFile opts.LogOutput !logMap
-            { ProjectFileName = opts.ProjectFile
-              SourceFiles = sourceFiles
-              OtherOptions = otherOptions
-              ReferencedProjects = referencedProjects
-              IsIncompleteTypeCheckEnvironment = false
-              UseScriptResolutionRules = false
-              LoadTime = loadedTimeStamp
-              UnresolvedReferences = None 
-              OriginalLoadReferences = []
-              ExtraProjectInfo = None
-              Stamp = None }
+                logMap := Map.add opts.ProjectFile opts.LogOutput !logMap
+                let r =
+                    { ProjectFileName = opts.ProjectFile
+                      SourceFiles = sourceFiles
+                      OtherOptions = otherOptions
+                      ReferencedProjects = referencedProjects
+                      IsIncompleteTypeCheckEnvironment = false
+                      UseScriptResolutionRules = false
+                      LoadTime = loadedTimeStamp
+                      UnresolvedReferences = None 
+                      OriginalLoadReferences = []
+                      ExtraProjectInfo = None
+                      Stamp = None }
+                cache.Add(opts,r)
+                r
 
 #if NETSTANDARD1_6
         let arguments = [|
