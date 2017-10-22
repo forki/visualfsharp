@@ -385,10 +385,7 @@ module internal ProjectCrackerTool =
       static member Parse(fsprojFileName:string, ?properties, ?enableLogging) = new FSharpProjectFileInfo(fsprojFileName, ?properties=properties, ?enableLogging=enableLogging)
 
   let getOptions file enableLogging properties =
-    let cache = System.Collections.Generic.HashSet<_>()
     let rec getOptions file : Option<string> * ProjectOptions =
-      if not (cache.Add file) then
-        failwithf "Circular dependency: %A" file
       let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=enableLogging)
 
       let referencedProjectOptions =
