@@ -393,7 +393,9 @@ module internal ProjectCrackerTool =
       if not (cache.Add file) then
         failwithf "Circular dependency: %A" file
       if cache.Count > 100 then failwithf "%A" <| Seq.toList cache
+      printfn "parse %s" file
       let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=enableLogging)
+      printfn "parsed" 
       let referencedProjectOptions =
         [| for file in parsedProject.ProjectReferences do
              if Path.GetExtension(file) = ".fsproj" then
