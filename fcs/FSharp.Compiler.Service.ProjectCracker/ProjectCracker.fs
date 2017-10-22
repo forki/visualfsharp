@@ -24,7 +24,7 @@ type ProjectCracker =
             | _ ->
                 if not (isNull opts.Error) then failwith opts.Error
 
-                let referencedProjects = Array.map (fun (a, b) -> a, convert b) opts.ReferencedProjectOptions
+                let referencedProjects() = Array.map (fun (a, b) -> a, convert b) opts.ReferencedProjectOptions
             
                 let sourceFiles, otherOptions = 
                     opts.Options 
@@ -47,7 +47,7 @@ type ProjectCracker =
                     { ProjectFileName = opts.ProjectFile
                       SourceFiles = sourceFiles
                       OtherOptions = otherOptions
-                      ReferencedProjects = referencedProjects
+                      ReferencedProjects = referencedProjects()
                       IsIncompleteTypeCheckEnvironment = false
                       UseScriptResolutionRules = false
                       LoadTime = loadedTimeStamp
