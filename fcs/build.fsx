@@ -116,7 +116,10 @@ Target "Build.NetFx" (fun _ ->
 // Run the unit tests using test runner
 
 Target "Test.NetFx" (fun _ ->
-    !! (releaseDir + "/fcs/net45/FSharp.Compiler.Service.Tests.dll")
+    !! ("./**/dependencies/**/MSBuild.v14.0/**/*.*") 
+    |> CopyFile (releaseDir + "/fcs/net45") 
+    
+    !! (/FSharp.Compiler.Service.Tests.dll")
     |> Seq.map FullName
     |>  Fake.Testing.NUnit3.NUnit3 (fun p ->
         { p with
