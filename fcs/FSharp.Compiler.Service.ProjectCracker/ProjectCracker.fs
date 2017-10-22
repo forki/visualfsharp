@@ -19,7 +19,7 @@ module Utils =
 
         let rec convertProject (opts: ProjectCrackerTool.ProjectOptions) =
             match cache.Add opts with
-            | true -> failwithf "Circular dependency: %A %A %A" originalOpts opts !logMap
+            | false -> failwithf "Circular dependency: %A %A %A" originalOpts opts !logMap
             | _ ->
                 if not (isNull opts.Error) then failwith opts.Error
 

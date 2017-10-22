@@ -184,9 +184,6 @@ let ``Project file parsing -- no project references``() =
   checkOption references "mscorlib.dll"
   checkOption references "System.Core.dll"
   checkOption references "System.dll"
-  checkOption references "Test1.dll"
-  printfn "Project file parsing -- references: references = %A" references
-  references |> should haveLength 5
   p.ReferencedProjects |> should haveLength 0
 
 [<Test>]
