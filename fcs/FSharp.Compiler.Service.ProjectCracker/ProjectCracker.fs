@@ -16,11 +16,11 @@ type ProjectCracker =
         let properties = defaultArg properties []
         let enableLogging = defaultArg enableLogging true
         let logMap = ref Map.empty
-        let cache = System.Collections.Generic.Dictionary<_,_>()
+        let cache = System.Collections.Generic.HashSet<_,_>()
 
         let rec convert (opts: ProjectCrackerTool.ProjectOptions) : FSharpProjectOptions =
-            match cache.TryGetValue opts with
-            | true, r -> r
+            match cache.Add opts with
+            | true -> failwithf "Circular dependency: %A %A" opts !logMap
             | _ ->
                 if not (isNull opts.Error) then failwith opts.Error
 
@@ -43,21 +43,18 @@ type ProjectCracker =
                 )
 
                 logMap := Map.add opts.ProjectFile opts.LogOutput !logMap
-                let r =
-                    { ProjectFileName = opts.ProjectFile
-                      SourceFiles = sourceFiles
-                      OtherOptions = otherOptions
-                      ReferencedProjects = referencedProjects()
-                      IsIncompleteTypeCheckEnvironment = false
-                      UseScriptResolutionRules = false
-                      LoadTime = loadedTimeStamp
-                      UnresolvedReferences = None 
-                      OriginalLoadReferences = []
-                      ExtraProjectInfo = None
-                      Stamp = None }
-                cache.Add(opts,r)
-                r
-
+                { ProjectFileName = opts.ProjectFile
+                  SourceFiles = sourceFiles
+                  OtherOptions = otherOptions
+                  ReferencedProjects = referencedProjects()
+                  IsIncompleteTypeCheckEnvironment = false
+                  UseScriptResolutionRules = false
+                  LoadTime = loadedTimeStamp
+                  UnresolvedReferences = None 
+                  OriginalLoadReferences = []
+                  ExtraProjectInfo = None
+                  Stamp = None }
+                
 #if NETSTANDARD1_6
         let arguments = [|
             yield projectFileName
