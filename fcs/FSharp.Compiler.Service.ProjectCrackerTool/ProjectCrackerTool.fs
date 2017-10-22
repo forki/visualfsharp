@@ -131,7 +131,7 @@ module internal ProjectCrackerTool =
       let CrackProjectUsingNewBuildAPI(fsprojFile) =
           let fsprojFullPath = try Path.GetFullPath(fsprojFile) with _ -> fsprojFile
           let fsprojAbsDirectory = Path.GetDirectoryName fsprojFullPath
-
+          printfn "Starteed"
           use _pwd = 
               let dir = Directory.GetCurrentDirectory()
               Directory.SetCurrentDirectory(fsprojAbsDirectory)
@@ -139,8 +139,9 @@ module internal ProjectCrackerTool =
                     member x.Dispose() = Directory.SetCurrentDirectory(dir) }
           use engine = new Microsoft.Build.Evaluation.ProjectCollection()
           let host = new HostCompile()
+          printfn "Compile"
           engine.HostServices.RegisterHostObject(fsprojFullPath, "CoreCompile", "Fsc", host)
-
+          printfn "Registered"
 
           let projectInstanceFromFullPath (fsprojFullPath: string) =
               use file = new FileStream(fsprojFullPath, FileMode.Open, FileAccess.Read, FileShare.Read)
@@ -157,7 +158,7 @@ module internal ProjectCrackerTool =
               project.SetGlobalProperty("ShouldUnsetParentConfigurationAndPlatform", "false") |> ignore
               for (prop, value) in properties do
                     project.SetGlobalProperty(prop, value) |> ignore
-
+              printfn "instance"
               project.CreateProjectInstance()
 
           let project = projectInstanceFromFullPath fsprojFullPath
