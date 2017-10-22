@@ -464,6 +464,14 @@ module internal ProjectCrackerTool =
 #if !DOTNETCORE
               addMSBuildv14BackupResolution ()
 #endif
+              try
+                // this type is used inside the msbuild xml files for evaluation - if it is not available, it will later fail anyway.
+                // so try to preload it, and fail with an explicit error if that fails.
+                let t = typeof<Microsoft.Build.Utilities.ToolLocationHelper>
+                ()
+              with
+                exn ->
+                  raise(Exception("Could not load the type 'ToolLocationHelper'. Evaluation can not continue.", exn))
               let props = pairs (List.ofArray argv.[2..])
               let opts = getOptions argv.[0] enableLogging props
               0, opts
