@@ -47,6 +47,8 @@ module internal ProjectCrackerTool =
       let mkAbsolute dir v = 
           if Path.IsPathRooted v then v
           else Path.Combine(dir, v)
+          
+      printfn "first" 
 
       let logOpt =
           if enableLogging then
@@ -55,7 +57,7 @@ module internal ProjectCrackerTool =
               Some log
           else
               None
-
+      printfn "logger" 
 #if !DOTNETCORE
       let mkAbsoluteOpt dir v =  Option.map (mkAbsolute dir) v
 
