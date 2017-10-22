@@ -48,7 +48,7 @@ module internal ProjectCrackerTool =
           if Path.IsPathRooted v then v
           else Path.Combine(dir, v)
           
-      printfn "first" 
+      let firstx = printfn "first"; 1
 
       let logOpt =
           if enableLogging then
@@ -57,7 +57,7 @@ module internal ProjectCrackerTool =
               Some log
           else
               None
-      printfn "logger" 
+      let secondx = printfn "logger"; 0
 #if !DOTNETCORE
       let mkAbsoluteOpt dir v =  Option.map (mkAbsolute dir) v
 
@@ -134,6 +134,7 @@ module internal ProjectCrackerTool =
           List.tryFind (fun v -> IO.File.Exists(msbuildBin v)) vsVersions
 
       let CrackProjectUsingNewBuildAPI(fsprojFile) =
+          printfn "new api" 
           let fsprojFullPath = try Path.GetFullPath(fsprojFile) with _ -> fsprojFile
           let fsprojAbsDirectory = Path.GetDirectoryName fsprojFullPath
           printfn "Starteed"
@@ -198,6 +199,7 @@ module internal ProjectCrackerTool =
           outFileOpt, directory, getItems, references, projectReferences, getprop project, project.FullPath
 
       let outFileOpt, directory, getItems, references, projectReferences, getProp, fsprojFullPath =
+        printfn "funn" 
         try
 #if DOTNETCORE
           CrackProjectUsingNewBuildAPI(fsprojFileName)
