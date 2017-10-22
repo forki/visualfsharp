@@ -10,21 +10,20 @@ open System.IO
 open System
 open System.Xml
 
-type ProjectCracker =
-    static member GetProjectOptionsFromProjectFileLogged(projectFileName : string, ?properties : (string * string) list, ?loadedTimeStamp, ?enableLogging) =
-        let loadedTimeStamp = defaultArg loadedTimeStamp DateTime.MaxValue // Not 'now', we don't want to force reloading
-        let properties = defaultArg properties []
-        let enableLogging = defaultArg enableLogging true
-        let logMap = ref Map.empty
-        let cache = System.Collections.Generic.HashSet<_,_>()
+module Utils =
 
-        let rec convert (originalOpts: ProjectCrackerTool.ProjectOptions) (opts: ProjectCrackerTool.ProjectOptions) : FSharpProjectOptions =
+    let Convert (originalOpts: ProjectCrackerTool.ProjectOptions) =
+
+        let cache = System.Collections.Generic.HashSet<_>()
+        let logMap = ref Map.empty
+
+        let rec convertProject (opts: ProjectCrackerTool.ProjectOptions) =
             match cache.Add opts with
             | true -> failwithf "Circular dependency: %A %A %A" originalOpts opts !logMap
             | _ ->
                 if not (isNull opts.Error) then failwith opts.Error
 
-                let referencedProjects() = Array.map (fun (a, b) -> a, convert originalOpts b) opts.ReferencedProjectOptions
+                let referencedProjects() = Array.map (fun (a, b) -> convertProject b) opts.ReferencedProjectOptions
             
                 let sourceFiles, otherOptions = 
                     opts.Options 
@@ -53,7 +52,17 @@ type ProjectCracker =
                   UnresolvedReferences = None 
                   OriginalLoadReferences = []
                   ExtraProjectInfo = None
-                  Stamp = None }
+                  Stamp = None }, !logMap
+
+        convertProject originalOpts
+
+type ProjectCracker =
+
+    static member GetProjectOptionsFromProjectFileLogged(projectFileName : string, ?properties : (string * string) list, ?loadedTimeStamp, ?enableLogging) =
+        let loadedTimeStamp = defaultArg loadedTimeStamp DateTime.MaxValue // Not 'now', we don't want to force reloading
+        let properties = defaultArg properties []
+        let enableLogging = defaultArg enableLogging true
+
                 
 #if NETSTANDARD1_6
         let arguments = [|
@@ -118,7 +127,7 @@ type ProjectCracker =
                 raise (Exception(sprintf "error parsing ProjectCrackerTool output, stdoutput was:\n%s\n\nstderr was:\n%s" crackerOut crackerErr, exn))
 #endif
         
-        convert opts, !logMap
+        Utils.Convert opts
 
     static member GetProjectOptionsFromProjectFile(projectFileName : string, ?properties : (string * string) list, ?loadedTimeStamp) =
         fst (ProjectCracker.GetProjectOptionsFromProjectFileLogged(
