@@ -116,7 +116,7 @@ Target "Build.NetFx" (fun _ ->
 // Run the unit tests using test runner
 
 Target "Test.NetFx" (fun _ ->
-    !! ("./**/dependencies/**/MSBuild.v14.0/**/*.*") 
+    !! ("./**/dependencies/**/MSBuild.*/**/*.*") 
     |> CopyFiles (releaseDir + "/fcs/net45")
     
     !! (releaseDir + "/fcs/net45/FSharp.Compiler.Service.Tests.dll")
