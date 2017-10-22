@@ -78,7 +78,8 @@ type ProjectCracker =
         let codebase = Path.GetDirectoryName(Uri(typeof<ProjectCracker>.Assembly.CodeBase).LocalPath)
         
         let crackerFilename = Path.Combine(codebase,"FSharp.Compiler.Service.ProjectCrackerTool.exe")
-        if not (File.Exists crackerFilename) then failwithf "ProjectCracker exe not found at: %s it must be next to the ProjectCracker dll." crackerFilename
+        if not (File.Exists crackerFilename) then 
+            failwithf "ProjectCracker exe not found at: %s it must be next to the ProjectCracker dll." crackerFilename
 
         let p = new System.Diagnostics.Process()
 
