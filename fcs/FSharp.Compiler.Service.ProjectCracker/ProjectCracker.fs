@@ -113,8 +113,8 @@ type ProjectCracker =
         let crackerOut = sbOut.ToString()
         let crackerErr = sbErr.ToString()
 
-        if p.ExitCode <> 0 then
-            failwithf "'FSharp.Compiler.Service.ProjectCrackerTool.exe' exited with code %i.\nstdoutput was:\n%s\n\nstderr was:\n%s" p.ExitCode crackerOut crackerErr
+    //    if p.ExitCode <> 0 then
+    //        failwithf "'FSharp.Compiler.Service.ProjectCrackerTool.exe' exited with code %i.\nstdoutput was:\n%s\n\nstderr was:\n%s" p.ExitCode crackerOut crackerErr
             
         let opts = 
             try

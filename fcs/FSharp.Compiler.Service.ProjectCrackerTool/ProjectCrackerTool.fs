@@ -59,10 +59,9 @@ module internal ProjectCrackerTool =
   let mkAbsoluteOpt dir v =  Option.map (mkAbsolute dir) v
 
   let CrackProjectUsingNewBuildAPI fsprojFile properties logOpt =
-    printfn "new api" 
     let fsprojFullPath = try Path.GetFullPath(fsprojFile) with _ -> fsprojFile
     let fsprojAbsDirectory = Path.GetDirectoryName fsprojFullPath
-    printfn "Starteed"
+
     use _pwd = 
         let dir = Directory.GetCurrentDirectory()
         Directory.SetCurrentDirectory(fsprojAbsDirectory)
@@ -70,9 +69,8 @@ module internal ProjectCrackerTool =
             member x.Dispose() = Directory.SetCurrentDirectory(dir) }
     use engine = new Microsoft.Build.Evaluation.ProjectCollection()
     let host = new HostCompile()
-    printfn "Compile"
+
     engine.HostServices.RegisterHostObject(fsprojFullPath, "CoreCompile", "Fsc", host)
-    printfn "Registered"
 
     let projectInstanceFromFullPath (fsprojFullPath: string) =
         use file = new FileStream(fsprojFullPath, FileMode.Open, FileAccess.Read, FileShare.Read)
@@ -89,7 +87,7 @@ module internal ProjectCrackerTool =
         project.SetGlobalProperty("ShouldUnsetParentConfigurationAndPlatform", "false") |> ignore
         for (prop, value) in properties do
             project.SetGlobalProperty(prop, value) |> ignore
-        printfn "instance"
+
         project.CreateProjectInstance()
 
     let project = projectInstanceFromFullPath fsprojFullPath
@@ -125,7 +123,6 @@ module internal ProjectCrackerTool =
 
 #if !DOTNETCORE
   let CrackProjectUsingOldBuildAPI (fsprojFile:string) properties logOpt = 
-    printfn "olds"
     let engine = new Microsoft.Build.BuildEngine.Engine()
     Option.iter (fun l -> engine.RegisterLogger(l)) logOpt
 
@@ -184,10 +181,8 @@ module internal ProjectCrackerTool =
   //
   [<Sealed; AutoSerializable(false)>]
   type FSharpProjectFileInfo (fsprojFileName:string, ?properties, ?enableLogging) =
-      let properties = printfn "props" ; defaultArg properties []
+      let properties = defaultArg properties []
       let enableLogging = defaultArg enableLogging false
-          
-      let firstx = printfn "first"; 1
 
       let logOpt =
           if enableLogging then
@@ -196,10 +191,8 @@ module internal ProjectCrackerTool =
               Some log
           else
               None
-      let secondx = printfn "logger"; 0
   
       let outFileOpt, directory, getItems, references, projectReferences, getProp, fsprojFullPath =
-        printfn "funn" 
         try
 #if DOTNETCORE
           CrackProjectUsingNewBuildAPI fsprojFileName properties logOpt
@@ -389,17 +382,15 @@ module internal ProjectCrackerTool =
       member x.OutputPath = outputPathOpt
       member x.FullPath = fsprojFullPath
       member x.LogOutput = logOutput
-      static member Parse(fsprojFileName:string, ?properties, ?enableLogging) = printfn "ctor" ; new FSharpProjectFileInfo(fsprojFileName, ?properties=properties, ?enableLogging=enableLogging)
+      static member Parse(fsprojFileName:string, ?properties, ?enableLogging) = new FSharpProjectFileInfo(fsprojFileName, ?properties=properties, ?enableLogging=enableLogging)
 
   let getOptions file enableLogging properties =
     let cache = System.Collections.Generic.HashSet<_>()
     let rec getOptions file : Option<string> * ProjectOptions =
       if not (cache.Add file) then
         failwithf "Circular dependency: %A" file
-      if cache.Count > 100 then failwithf "%A" <| Seq.toList cache
-      printfn "parse %s" file
       let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=enableLogging)
-      printfn "parsed" 
+
       let referencedProjectOptions =
         [| for file in parsedProject.ProjectReferences do
              if Path.GetExtension(file) = ".fsproj" then
