@@ -13,46 +13,41 @@ open System.Xml
 module Utils =
 
     let Convert loadedTimeStamp (originalOpts: ProjectCrackerTool.ProjectOptions) =
-
-        let cache = System.Collections.Generic.HashSet<_>()
         let logMap = ref Map.empty
 
         let rec convertProject (opts: ProjectCrackerTool.ProjectOptions) =
-            match cache.Add opts with
-            | false -> failwithf "Circular dependency: %A %A %A" originalOpts opts !logMap
-            | _ ->
-                if not (isNull opts.Error) then failwith opts.Error
+            if not (isNull opts.Error) then failwith opts.Error
 
-                let referencedProjects() = Array.map (fun (a, b) -> a,convertProject b) opts.ReferencedProjectOptions
+            let referencedProjects() = Array.map (fun (a, b) -> a,convertProject b) opts.ReferencedProjectOptions
             
-                let sourceFiles, otherOptions = 
-                    opts.Options 
-                    |> Array.partition (fun x -> 
-                        let extension = Path.GetExtension(x).ToLower()
-                        x.IndexOfAny(Path.GetInvalidPathChars()) = -1 
-                        && (extension = ".fs" || extension = ".fsi"))
+            let sourceFiles, otherOptions = 
+                opts.Options 
+                |> Array.partition (fun x -> 
+                    let extension = Path.GetExtension(x).ToLower()
+                    x.IndexOfAny(Path.GetInvalidPathChars()) = -1 
+                    && (extension = ".fs" || extension = ".fsi"))
             
-                let sepChar = Path.DirectorySeparatorChar
+            let sepChar = Path.DirectorySeparatorChar
             
-                let sourceFiles = sourceFiles |> Array.map (fun x -> 
-                    match sepChar with
-                    | '\\' -> x.Replace('/', '\\')
-                    | '/' -> x.Replace('\\', '/')
-                    | _ -> x
-                )
+            let sourceFiles = sourceFiles |> Array.map (fun x -> 
+                match sepChar with
+                | '\\' -> x.Replace('/', '\\')
+                | '/' -> x.Replace('\\', '/')
+                | _ -> x
+            )
 
-                logMap := Map.add opts.ProjectFile opts.LogOutput !logMap
-                { ProjectFileName = opts.ProjectFile
-                  SourceFiles = sourceFiles
-                  OtherOptions = otherOptions
-                  ReferencedProjects = referencedProjects()
-                  IsIncompleteTypeCheckEnvironment = false
-                  UseScriptResolutionRules = false
-                  LoadTime = loadedTimeStamp
-                  UnresolvedReferences = None 
-                  OriginalLoadReferences = []
-                  ExtraProjectInfo = None
-                  Stamp = None }
+            logMap := Map.add opts.ProjectFile opts.LogOutput !logMap
+            { ProjectFileName = opts.ProjectFile
+              SourceFiles = sourceFiles
+              OtherOptions = otherOptions
+              ReferencedProjects = referencedProjects()
+              IsIncompleteTypeCheckEnvironment = false
+              UseScriptResolutionRules = false
+              LoadTime = loadedTimeStamp
+              UnresolvedReferences = None 
+              OriginalLoadReferences = []
+              ExtraProjectInfo = None
+              Stamp = None }
 
         convertProject originalOpts, !logMap
 
