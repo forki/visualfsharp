@@ -18,13 +18,13 @@ type ProjectCracker =
         let logMap = ref Map.empty
         let cache = System.Collections.Generic.HashSet<_,_>()
 
-        let rec convert (opts: ProjectCrackerTool.ProjectOptions) : FSharpProjectOptions =
+        let rec convert (originalOpts: ProjectCrackerTool.ProjectOptions) (opts: ProjectCrackerTool.ProjectOptions) : FSharpProjectOptions =
             match cache.Add opts with
-            | true -> failwithf "Circular dependency: %A %A" opts !logMap
+            | true -> failwithf "Circular dependency: %A %A %A" originalOpts opts !logMap
             | _ ->
                 if not (isNull opts.Error) then failwith opts.Error
 
-                let referencedProjects() = Array.map (fun (a, b) -> a, convert b) opts.ReferencedProjectOptions
+                let referencedProjects() = Array.map (fun (a, b) -> a, convert originalOpts b) opts.ReferencedProjectOptions
             
                 let sourceFiles, otherOptions = 
                     opts.Options 
