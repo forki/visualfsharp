@@ -141,7 +141,8 @@ let ``Project file parsing -- bad project file``() =
     ProjectCracker.GetProjectOptionsFromProjectFileLogged(f) |> ignore
     failwith "Expected exception"
   with e -> 
-    Assert.That(e.Message, Contains.Substring "The project file could not be loaded.")
+    Assert.That(e.Message, Contains.Substring "Could not load project")
+    Assert.That(e.Message, Contains.Substring "Malformed.fsproj")
 
 [<Test>]
 let ``Project file parsing -- non-existent project file``() =
@@ -227,12 +228,13 @@ let ``Project file parsing -- Logging``() =
   let projectFileName = normalizePath (__SOURCE_DIRECTORY__ + @"/data/ToolsVersion12.fsproj")
   let _, logMap = ProjectCracker.GetProjectOptionsFromProjectFileLogged(projectFileName, enableLogging=true)
   let log = logMap.[projectFileName]
-
+  
+  Assert.That(log, Is.StringContaining("ResolveAssemblyReference"))
   if runningOnMono then
-    Assert.That(log, Is.StringContaining("Reference System.Core resolved"))
-    Assert.That(log, Is.StringContaining("Using task ResolveAssemblyReference from Microsoft.Build.Tasks.ResolveAssemblyReference"))
-  else
-    Assert.That(log, Is.StringContaining("""Using "ResolveAssemblyReference" task from assembly "Microsoft.Build.Tasks.Core, Version=14.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"."""))
+    Assert.That(log, Is.StringContaining("System.Core"))
+    Assert.That(log, Is.StringContaining("Microsoft.Build.Tasks.ResolveAssemblyReference"))
+  else  
+    Assert.That(log, Is.StringContaining("Microsoft.Build.Tasks.Core"))
 
 [<Test>]
 let ``Project file parsing -- FSharpProjectOptions.SourceFiles contains both fs and fsi files``() =
