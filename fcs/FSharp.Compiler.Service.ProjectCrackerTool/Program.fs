@@ -17,7 +17,6 @@ module Program =
                 // If the version of MSBuild that we're using wasn't present on the machine, then 
                 // just revert back to 12.0.0.0 since that's normally installed as part of the .NET 
                 // Framework.
-                printfn "Loading 12 %A" requestedAssembly
                 requestedAssembly.Version <- Version("12.0.0.0")
                 Assembly.Load requestedAssembly
             else
