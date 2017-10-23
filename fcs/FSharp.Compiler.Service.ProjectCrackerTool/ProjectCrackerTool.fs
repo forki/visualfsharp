@@ -476,8 +476,8 @@ module internal ProjectCrackerTool =
               2, { ProjectFile = projectFile;
                    Options = [||];
                    ReferencedProjectOptions = [||];
-                   LogOutput = e.ToString() 
-                   Error = e.Message }
+                   LogOutput = e.ToString() + " at" + e.StackTrace
+                   Error = e.Message + "StackTrace:" + e.StackTrace }
       else
           1, { ProjectFile = "";
                Options = [||];
