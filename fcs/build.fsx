@@ -118,9 +118,6 @@ Target "Build.NetFx" (fun _ ->
 Target "Test.NetFx" (fun _ ->
     let testDir = FullName (releaseDir + "/fcs/net45")
     
-    !! ("./**/dependencies/**/System.Threading.Tasks.Dataflow/**/*.*") 
-    |> CopyFiles testDir
-    
     !! (testDir + "/FSharp.Compiler.Service.Tests.dll")
     |> Seq.map FullName
     |>  Fake.Testing.NUnit3.NUnit3 (fun p ->
