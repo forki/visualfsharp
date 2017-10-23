@@ -117,7 +117,11 @@ Target "Build.NetFx" (fun _ ->
 
 Target "Test.NetFx" (fun _ ->
     let testDir = FullName (releaseDir + "/fcs/net45")
-    !! ("./**/dependencies/**/*.*") 
+
+    !! ("./**/dependencies/**/MSBuild.v14.0/**/*.*") 
+    |> CopyFiles testDir
+
+    !! ("./**/dependencies/**/System.Threading.Tasks.Dataflow/**/*.*") 
     |> CopyFiles testDir
     
     !! ("./packages/Microsoft.Build.Utilities.Core/lib/net45/**/*.*") 
