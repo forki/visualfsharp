@@ -15,3 +15,4 @@ NUGET
     Microsoft.Build.Framework (14.3)
     Microsoft.Build.Utilities.Core (14.3)
       Microsoft.Build.Framework (14.3)
+    System.Threading.Tasks.Dataflow (4.5.24)
