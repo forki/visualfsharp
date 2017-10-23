@@ -7,6 +7,7 @@ open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
 module internal ProjectCrackerTool =
+  open System.Collections.Generic
 
   let runningOnMono =
 #if DOTNETCORE
@@ -388,52 +389,57 @@ module internal ProjectCrackerTool =
       static member Parse(fsprojFileName:string, ?properties, ?enableLogging) = new FSharpProjectFileInfo(fsprojFileName, ?properties=properties, ?enableLogging=enableLogging)
 
   let getOptions file enableLogging properties =
+    let cache = new Dictionary<_,_>()
     let rec getOptions file : Option<string> * ProjectOptions =
-      let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=enableLogging)
+      match cache.TryGetValue file with
+      | true, option -> option
+      | _ ->
+          let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=enableLogging)
 
-      let referencedProjectOptions =
-        [| for file in parsedProject.ProjectReferences do
-             if Path.GetExtension(file) = ".fsproj" then
-                match getOptions file with
-                | Some outFile, opts -> yield outFile, opts
-                | None, _ -> () |]
+          let referencedProjectOptions =
+            [| for file in parsedProject.ProjectReferences do
+                 if Path.GetExtension(file) = ".fsproj" then
+                    match getOptions file with
+                    | Some outFile, opts -> yield outFile, opts
+                    | None, _ -> () |]
 
-      // Workaround for Mono 4.2, which doesn't populate the subproject
-      // details anymore outside of a solution context. See https://github.com/mono/mono/commit/76c6a08e730393927b6851709cdae1d397cbcc3a#diff-59afd196a55d61d5d1eaaef7bd49d1e5
-      // and some explanation from the author at https://github.com/fsharp/FSharp.Compiler.Service/pull/455#issuecomment-154103963
-      //
-      // In particular we want the output path, which we can get from
-      // fully parsing that project itself. We also have to specially parse
-      // C# referenced projects, as we don't look at them otherwise.
-      let referencedProjectOutputs =
-          if runningOnMono then
-              [ yield! Array.map (fun (s,_) -> "-r:" + s) referencedProjectOptions
-                for file in parsedProject.ProjectReferences do
-                    let ext = Path.GetExtension(file)
-                    if ext = ".csproj" || ext = ".vbproj" then
-                        let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=false)
-                        match parsedProject.OutputFile with
-                        | None -> ()
-                        | Some f -> yield "-r:" + f ]
-          else
-              []
+          // Workaround for Mono 4.2, which doesn't populate the subproject
+          // details anymore outside of a solution context. See https://github.com/mono/mono/commit/76c6a08e730393927b6851709cdae1d397cbcc3a#diff-59afd196a55d61d5d1eaaef7bd49d1e5
+          // and some explanation from the author at https://github.com/fsharp/FSharp.Compiler.Service/pull/455#issuecomment-154103963
+          //
+          // In particular we want the output path, which we can get from
+          // fully parsing that project itself. We also have to specially parse
+          // C# referenced projects, as we don't look at them otherwise.
+          let referencedProjectOutputs =
+              if runningOnMono then
+                  [ yield! Array.map (fun (s,_) -> "-r:" + s) referencedProjectOptions
+                    for file in parsedProject.ProjectReferences do
+                        let ext = Path.GetExtension(file)
+                        if ext = ".csproj" || ext = ".vbproj" then
+                            let parsedProject = FSharpProjectFileInfo.Parse(file, properties=properties, enableLogging=false)
+                            match parsedProject.OutputFile with
+                            | None -> ()
+                            | Some f -> yield "-r:" + f ]
+              else
+                  []
 
-          // On some versions of Mono the referenced projects are already
-          // correctly included, so we make sure not to introduce duplicates
-          |> List.filter (fun r -> not (Set.contains r (set parsedProject.Options)))
+              // On some versions of Mono the referenced projects are already
+              // correctly included, so we make sure not to introduce duplicates
+              |> List.filter (fun r -> not (Set.contains r (set parsedProject.Options)))
 
-      let options = { ProjectFile = file
-                      Options = Array.ofSeq (parsedProject.Options @ referencedProjectOutputs)
-                      ReferencedProjectOptions = referencedProjectOptions
-                      LogOutput = parsedProject.LogOutput 
-                      Error = null }
+          let options = { ProjectFile = file
+                          Options = Array.ofSeq (parsedProject.Options @ referencedProjectOutputs)
+                          ReferencedProjectOptions = referencedProjectOptions
+                          LogOutput = parsedProject.LogOutput 
+                          Error = null }
 
-      parsedProject.OutputFile, options
+          let result = parsedProject.OutputFile, options
+          cache.Add(file,result)
+          result
 
     snd (getOptions file)
 
-
-
+    
   let rec pairs l =
     match l with
     | [] | [_] -> []
