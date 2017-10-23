@@ -113,14 +113,14 @@ module internal ProjectCrackerTool =
 
     let projectReferences =
         [ for cp in project.GetItems("ProjectReference") do
-                yield cp.GetMetadataValue("FullPath")
+             yield cp.GetMetadataValue("FullPath")
         ]
 
     let references =
         [ for i in project.GetItems("ReferencePath") do
-            yield i.EvaluatedInclude
-            for i in project.GetItems("ChildProjectReferences") do
-            yield i.EvaluatedInclude ]
+              yield i.EvaluatedInclude
+          for i in project.GetItems("ChildProjectReferences") do
+              yield i.EvaluatedInclude ]
 
     outFileOpt, directory, getItems, references, projectReferences, getprop project, project.FullPath
 
