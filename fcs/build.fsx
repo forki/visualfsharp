@@ -16,7 +16,7 @@ System.Console.OutputEncoding <- System.Text.Encoding.UTF8
 #endif
 
 
-let dotnetExePath = DotNetCli.InstallDotNetSDK "2.0.0"
+let dotnetExePath = DotNetCli.InstallDotNetSDK "2.0.2"
 
 let runDotnet workingDir args =
     let result =
