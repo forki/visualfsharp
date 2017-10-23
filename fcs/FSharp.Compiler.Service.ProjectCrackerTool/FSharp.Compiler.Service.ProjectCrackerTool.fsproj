@@ -46,6 +46,7 @@
     <Compile Include="Program.fs" />
     <None Include="App.config" />
     <None Include="FSharp.Compiler.Service.ProjectCracker.targets" />
+    <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="mscorlib" />
