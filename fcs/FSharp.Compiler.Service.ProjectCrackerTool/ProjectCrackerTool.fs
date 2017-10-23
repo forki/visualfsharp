@@ -77,8 +77,12 @@ module internal ProjectCrackerTool =
         use stream = new StreamReader(file)
         use xmlReader = System.Xml.XmlReader.Create(stream)
 
-        let project = engine.LoadProject(xmlReader, FullPath=fsprojFullPath)
-              
+        let project =
+            try
+                engine.LoadProject(xmlReader, FullPath=fsprojFullPath)
+            with
+            | exn -> raise (new Exception(sprintf "Could not load project %s in BuildEngine. Message: %s" fsprojFullPath exn.Message))
+            
         project.SetGlobalProperty("BuildingInsideVisualStudio", "true") |> ignore
         if not (List.exists (fun (p,_) -> p = "VisualStudioVersion") properties) then
             match vs with
