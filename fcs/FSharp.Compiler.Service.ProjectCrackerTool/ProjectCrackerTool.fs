@@ -208,7 +208,11 @@ module internal ProjectCrackerTool =
           if runningOnMono then
               CrackProjectUsingOldBuildAPI fsprojFileName properties logOpt
           else
-              CrackProjectUsingNewBuildAPI fsprojFileName properties logOpt
+              try
+                CrackProjectUsingNewBuildAPI fsprojFileName properties logOpt
+              with
+              | exn ->
+                CrackProjectUsingOldBuildAPI fsprojFileName properties logOpt
         with
           | :? Microsoft.Build.BuildEngine.InvalidProjectFileException as e ->
                raise (Microsoft.Build.Exceptions.InvalidProjectFileException(
