@@ -8,6 +8,7 @@ open Microsoft.Build.Utilities
 
 module internal ProjectCrackerTool =
   open System.Collections.Generic
+  open Microsoft.Build.Evaluation
 
   let runningOnMono =
 #if DOTNETCORE
@@ -81,7 +82,9 @@ module internal ProjectCrackerTool =
             try
                 engine.LoadProject(xmlReader, FullPath=fsprojFullPath)
             with
-            | exn -> raise (new Exception(sprintf "Could not load project %s in BuildEngine. Message: %s" fsprojFullPath exn.Message))
+            | exn -> 
+                
+                raise (new Exception(sprintf "Could not load project %s in ProjectCollection %A %A. Message: %s" fsprojFullPath engine.ToolsetLocations engine.Toolsets exn.Message))
             
         project.SetGlobalProperty("BuildingInsideVisualStudio", "true") |> ignore
         if not (List.exists (fun (p,_) -> p = "VisualStudioVersion") properties) then
