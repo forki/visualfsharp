@@ -34,7 +34,7 @@ module Program =
             ser.WriteObject(Console.OpenStandardOutput(), opts)
         ret
 
-
+    [<System.STAThread>]
     [<EntryPoint>]
     let main argv =
         let asText = Array.exists (fun (s: string) -> s = "--text") argv
