@@ -6,4 +6,6 @@ nuget FAKE
 nuget FSharp.Formatting
 
 nuget Microsoft.Build.Utilities.Core 14.3.0
+nuget Microsoft.Build.Framework 14.3.0
+nuget Microsoft.Build.Engine 14.3.0
 
