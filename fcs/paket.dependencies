@@ -5,3 +5,5 @@ source https://www.nuget.org/api/v2/
 nuget FAKE
 nuget FSharp.Formatting
 
+nuget Microsoft.Build.Utilities.Core 14.3.0
+

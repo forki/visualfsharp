@@ -116,16 +116,20 @@ Target "Build.NetFx" (fun _ ->
 // Run the unit tests using test runner
 
 Target "Test.NetFx" (fun _ ->
+    let testDir = FullName (releaseDir + "/fcs/net45")
     !! ("./**/dependencies/**/*.*") 
-    |> CopyFiles (releaseDir + "/fcs/net45")
+    |> CopyFiles testDir
     
-    !! (releaseDir + "/fcs/net45/FSharp.Compiler.Service.Tests.dll")
+    !! ("./packages/Microsoft.Build.Utilities.Core/lib/net45/**/*.*") 
+    |> CopyFiles testDir
+    
+    !! (testDir + "/FSharp.Compiler.Service.Tests.dll")
     |> Seq.map FullName
     |>  Fake.Testing.NUnit3.NUnit3 (fun p ->
         { p with
             ToolPath = __SOURCE_DIRECTORY__ @@ @"..\packages\NUnit.Console.3.0.0\tools\nunit3-console.exe"
             ShadowCopy = false
-            WorkingDir = FullName (releaseDir + "/fcs/net45")
+            WorkingDir = FullName testDir
             TimeOut = TimeSpan.FromMinutes 20. })
 )
 
