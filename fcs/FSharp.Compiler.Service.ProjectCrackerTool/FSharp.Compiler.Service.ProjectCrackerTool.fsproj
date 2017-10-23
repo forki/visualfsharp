@@ -60,9 +60,8 @@
       <HintPath>$(FSharpSourcesRoot)/../fcs/dependencies/MSBuild.v14.0/Microsoft.Build.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Microsoft.Build.Utilities.v12.0">
-      <HintPath>$(FSharpSourcesRoot)/../fcs/dependencies/MSBuild.v12.0/Microsoft.Build.Utilities.v12.0.dll</HintPath>
-      <Private>false</Private>
+    <Reference Include="Microsoft.Build.Utilities.Core">
+      <HintPath>..\packages\Microsoft.Build.Utilities.Core\lib\net45\Microsoft.Build.Utilities.Core.dll</HintPath>
     </Reference>
     <Reference Include="mscorlib" />
     <Reference Include="System" />
@@ -71,13 +70,11 @@
     <Reference Include="System.Numerics" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Xml" />
-
     <!-- we build the nuget against FSHarp.Core 4.4.0.0 instead of our latest to allow use in wider range of F# tools -->
     <Reference Include="FSharp.Core">
       <HintPath>$(FSharpSourcesRoot)\..\packages\Microsoft.Portable.FSharp.Core.4.1.20\lib\profiles\net40\FSharp.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
-
   </ItemGroup>
   <Import Project="$(FSharpSourcesRoot)\..\packages\FSharp.Compiler.Tools.4.1.27\tools\Microsoft.FSharp.Targets" />
 </Project>
