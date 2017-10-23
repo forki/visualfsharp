@@ -12,13 +12,13 @@ module Program =
             let requestedAssembly = AssemblyName(evArgs.Name)
             if requestedAssembly.Name.StartsWith("Microsoft.Build.Utilities.Core") &&
                 not (requestedAssembly.Name.EndsWith(".resources")) && 
+                not (requestedAssembly.Version.ToString().Contains("14.0.25420.1")) &&
                 not (requestedAssembly.Version.ToString().Contains("12.0.0.0")) 
             then
                 // Load the shipped Microsoft.Build.Utilities.Core
                 printfn "Loading shipped %A" requestedAssembly
                 requestedAssembly.Version <- Version("14.0.25420.1")
                 Assembly.Load requestedAssembly
-
             elif requestedAssembly.Name.StartsWith("Microsoft.Build") &&
                 not (requestedAssembly.Name.EndsWith(".resources")) && 
                 not (requestedAssembly.Version.ToString().Contains("12.0.0.0")) 
