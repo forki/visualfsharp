@@ -83,7 +83,8 @@ module internal ProjectCrackerTool =
                 engine.LoadProject(xmlReader, FullPath=fsprojFullPath)
             with
             | exn -> 
-                raise (new Exception(sprintf "Could not load project %s in ProjectCollection %A %A. Message: %s" fsprojFullPath engine.ToolsetLocations (engine.Toolsets |> Seq.map (fun x -> x.ToolsPath + " " + x.ToolsVersion) |> Seq.toList) exn.Message))
+                let tools = engine.Toolsets |> Seq.map (fun x -> x.ToolsPath) |> Seq.toList
+                raise (new Exception(sprintf "Could not load project %s in ProjectCollection. Available tools: %A. Message: %s" fsprojFullPath tools exn.Message))
             
         project.SetGlobalProperty("BuildingInsideVisualStudio", "true") |> ignore
         if not (List.exists (fun (p,_) -> p = "VisualStudioVersion") properties) then
