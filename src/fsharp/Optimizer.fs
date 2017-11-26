@@ -1806,7 +1806,7 @@ and OptimizeExprOp cenv env (op, tyargs, args, m) =
           Info = UnknownValue }
     (* Handle these as special cases since mutables are allowed inside their bodies *)
     | TOp.While (spWhile, marker), _, [Expr.Lambda(_, _, _, [_], e1, _, _);Expr.Lambda(_, _, _, [_], e2, _, _)]  -> OptimizeWhileLoop cenv { env with inLoop=true } (spWhile, marker, e1, e2, m) 
-    | TOp.For(spStart, dir), _, [Expr.Lambda(_, _, _, [_], e1, _, _);Expr.Lambda(_, _, _, [_], e2, _, _);Expr.Lambda(_, _, _, [v], e3, _, _)]  -> OptimizeFastIntegerForLoop cenv { env with inLoop=true } (spStart, v, e1, dir, e2, e3, m) 
+    | TOp.For(spStart, dir), _, [Expr.Lambda(_, _, _, [_], e1, _, _);Expr.Lambda(_, _, _, [_], e2, _, _);Expr.Lambda(_, _, _, [v], e3, _, _)] when false -> OptimizeFastIntegerForLoop cenv { env with inLoop=true } (spStart, v, e1, dir, e2, e3, m) 
     | TOp.TryFinally(spTry, spFinally), [resty], [Expr.Lambda(_, _, _, [_], e1, _, _); Expr.Lambda(_, _, _, [_], e2, _, _)] -> OptimizeTryFinally cenv env (spTry, spFinally, e1, e2, m, resty)
     | TOp.TryCatch(spTry, spWith), [resty], [Expr.Lambda(_, _, _, [_], e1, _, _); Expr.Lambda(_, _, _, [vf], ef, _, _); Expr.Lambda(_, _, _, [vh], eh, _, _)] -> OptimizeTryCatch cenv env (e1, vf, ef, vh, eh, m, resty, spTry, spWith)
     | TOp.TraitCall(traitInfo), [], args -> OptimizeTraitCall cenv env (traitInfo, args, m) 
