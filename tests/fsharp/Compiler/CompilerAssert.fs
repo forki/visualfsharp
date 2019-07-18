@@ -114,7 +114,7 @@ module CompilerAssert =
     
     let TypeCheckWithErrors (source: string) expectedTypeErrors =
         lock gate <| fun () ->
-            let parseResults, fileAnswer = checker.ParseAndCheckFileInProject("test.fs", 0, SourceText.ofString source, defaultProjectOptions) |> Async.RunSynchronously
+            let parseResults, fileAnswer = checker.ParseAndCheckFileInProject("test.fs", 0, SourceText.ofString source, defaultProjectOptions, suggestNames=true) |> Async.RunSynchronously
 
             Assert.IsEmpty(parseResults.Errors, sprintf "Parse errors: %A" parseResults.Errors)
 
